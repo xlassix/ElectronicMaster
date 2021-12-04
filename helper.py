@@ -19,6 +19,8 @@ def getBinDriver()->(str,str):
     else:
         raise NotImplemented(f"Unknown OS '{osname}'")
 
+    if not path.isfile(installpath):
+        raise Exception("kindly install Chromium Browser Chrome preferable")
     no_digits = string.printable[10:]
     trans = str.maketrans(no_digits, " "*len(no_digits))
 

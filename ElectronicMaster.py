@@ -131,3 +131,4 @@ for csv in (getCsvs(_dir)):
         print("could not find `Query` in {}".format(csv))
     result_df[_columns].to_csv(
         path.join(_output_dir, timestamp+"_"+csv), index=False)
+browser.close()
