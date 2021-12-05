@@ -81,14 +81,14 @@ def getPriceList(browser: webdriver) -> dict:
                 else ("PB{} $".format(index//2+1), parseFloat(i)) for index, i in enumerate(data[:20])))
 
 
-def parseDefault(_str: str):
-    """This Parse rows(string) from the Managr
+def parseDefault(_str: str)->list:
+    """This Parse rows(string) from the Manufactures information on the page
 
     Args:
-        _str (str): [description]
+        _str (str): text containing("can ship") for example "35 can ship 02/02/22"
 
     Returns:
-        [type]: [description]
+        list:  result
     """
     _data = _str.split('can ship')
     result = [None, None]
