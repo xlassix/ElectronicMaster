@@ -82,6 +82,14 @@ def getPriceList(browser: webdriver) -> dict:
 
 
 def parseDefault(_str: str):
+    """This Parse rows(string) from the Managr
+
+    Args:
+        _str (str): [description]
+
+    Returns:
+        [type]: [description]
+    """
     _data = _str.split('can ship')
     result = [None, None]
     if(len(_data) == 2):
