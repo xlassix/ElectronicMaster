@@ -81,7 +81,7 @@ def getPriceList(browser: webdriver) -> dict:
                 else ("PB{} $".format(index//2+1), parseFloat(i)) for index, i in enumerate(data[:20])))
 
 
-def parseDefault(_str: str)->list:
+def parseDefault(_str: str) -> list:
     """This Parse rows(string) from the Manufactures information on the page
 
     Args:
