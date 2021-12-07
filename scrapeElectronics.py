@@ -174,7 +174,7 @@ def main():
 
     #run for every csv or Excel(xlsx) in _dir
     for excel in (getExcels(_dir)):
-        print('\n\n\n')
+        print('\n\n')
         result_df = pd.DataFrame(columns=_columns)
         timestamp = datetime.now()
         raw_data = pd.read_excel(path.join(_dir, excel)) if excel.endswith(
