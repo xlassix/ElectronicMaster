@@ -12,8 +12,6 @@ options = webdriver.ChromeOptions()
 # basic input folders
 _dir = "input"
 _output_dir = "output"
-
-
 makedirs(_output_dir, exist_ok=True)
 
 
