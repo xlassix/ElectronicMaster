@@ -36,6 +36,31 @@ def getTextByXPath(browser: webdriver, xpath: str) -> str:
     """
     return browser.find_element(by=By.XPATH, value=xpath).text.replace(",", "")
 
+def parseDate(dateStr: str,dateFormat:str="%m/%d/%y") -> date:
+    """This function takes a date string in the format `dateFormat` and returns a datetime object
+
+    Args:
+        dateStr (str)       : date string Example 5/30/22
+        dateFormat (str)    : date format for example "%m/%d/%y"
+    Returns:
+        date: datetime.date
+    """
+    return datetime.strptime(dateStr.strip(), dateFormat).date()
+
+
+def parseFloat(_number: str) -> float:
+    """This function takes in a string strips unwanted symbols like $ and + and parses it to a float
+
+    Args:
+        _number (str): for example $5.0 or 10000+
+
+    Returns:
+        float: 
+    """
+    return float(_number.strip().strip("+").strip("$"))
+
 class Scraper():
     def __init__(self):
-        pass
+        browser = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()))
+
