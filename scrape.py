@@ -10,6 +10,10 @@ import enum
 _dir = "input"
 _output_dir = "output"
 makedirs(_output_dir, exist_ok=True)
+_columns = ['Internal Part Number', 'Description', 'Manufacturer', 'Query',
+                'Qty', 'Run Datetime', "Stock", "Mfr PN", "Mfr", "Mfr Stock", "Mfr Stock Date", 'On-Order', 'On-Order Date', "Lead-Time", "Min Order",
+                "PB1 Qty", "PB2 Qty", "PB3 Qty", "PB4 Qty", "PB5 Qty", "PB6 Qty", "PB7 Qty", "PB8 Qty",	"PB9 Qty", "PB10 Qty", "PB1 $",	"PB2 $", "PB3 $",	"PB4 $",	"PB5 $",	"PB6 $",	"PB7 $",	"PB8 $",	"PB9 $", "PB10 $",	"URL"]
+
 
 
 def parseDate(dateStr: str, dateFormat: str = "%m/%d/%y") -> date:
@@ -115,3 +119,65 @@ class Scraper():
                 return False
             return True
         return False
+
+
+    def getPriceList(self) -> dict:
+        """This function get the Price list(dict) For UrlSource on a product page
+
+        Args:
+            browser (webdriver): Selenium.WebDriver
+
+        Returns:
+            dict
+        """
+        if UrlSource.masterElectronics==self._source:
+            data = self.getTextById('divPriceListLeft').split("\n")[3:]
+            del data[2::3]
+            return(dict(("PB{} Qty".format(index//2+1), parseFloat(i)) if(index % 2 == 0)
+                        else ("PB{} $".format(index//2+1), parseFloat(i)) for index, i in enumerate(data[:20])))
+        elif UrlSource.miniCircuit==self._source:
+            data = list(map(lambda x: list(map(lambda y: y.split(" ")[0], x.split(" $"))), self.getTextByXPath('//*[@id="model_price_section"]/table').split("\n")[1:]))
+            results = []
+            list(results.extend([("PB{} Qty".format(index+1), parseFloat(i[0])),
+                ("PB{} $".format(index+1), parseFloat(i[1]))]) for index, i in enumerate(data[:20]))
+            return dict(results)
+        return dict()
+
+
+    def parseDefault(_str: str):
+        _data = _str.split('can ship')
+        result = [None, None]
+        if(len(_data) == 2):
+            try:
+                result[0] = parseFloat(_data[0])
+            except:
+                result[0] = None
+            result[1] = parseDate(_data[1])
+
+        return result
+
+
+    def getMfrDetail(self) -> dict:
+        """The function get manafacturers For ElectoricMaster.com on a product page
+
+        Args:
+            browser (webdriver): Selenium.WebDriver
+
+        Returns:
+            dict
+        """
+        result = {}
+        data = self.getTextByXPath('//*[@id="divDefault"]/div/div').split("\n")
+        data = dict((i, j) for i, j in zip(data[::2], data[1::2]))
+        if ("Factory Lead-Time" in data):
+            result['Lead-Time'] = parseFloat(
+                data["Factory Lead-Time"].lower().split("weeks")[0])
+        if('Manufacturer Stock:' in data):
+            [result['Mfr Stock'], result["Mfr Stock Date"]
+            ] = parseDefault(data['Manufacturer Stock:'])
+        if('On Order:' in data):
+            [result['On-Order'], result["On-Order Date"]
+            ] = parseDefault(data['On Order:'])
+        if('Minimum Order:' in data):
+            result["Min Order"] = parseFloat(data['Minimum Order:'])
+        return result
