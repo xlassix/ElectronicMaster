@@ -181,3 +181,48 @@ class Scraper():
         if('Minimum Order:' in data):
             result["Min Order"] = parseFloat(data['Minimum Order:'])
         return result
+
+    def scrape(input_dir:str,output_dir=str):
+        for excel in (getExcels(input_dir)):
+            print('\n\n')
+            result_df = pd.DataFrame(columns=_columns)
+            timestamp = datetime.now()
+            raw_data = pd.read_excel(path.join(_dir, excel)) if excel.endswith(
+                '.xlsx') else pd.read_csv(path.join(_dir, excel))
+            present_columns = set(raw_data.columns).intersection(
+                ['Internal Part Number', 'Description', 'Manufacturer', 'Query', 'Qty'])
+            print(raw_data)
+            if ("Query" in present_columns):
+                for index, row in enumerate(raw_data.to_dict(orient='records')):
+                    print("currently at index: {} \nData\t:{}".format(index, row))
+                    if getItem(browser, row["Query"]):
+                        row['Run Datetime'] = timestamp
+                        if self._source==UrlSource.masterElectronics:
+                            row['Mfr'] = self.getTextByXPath( '//*[@id="product-details"]/a')
+                            row["Mfr PN"] = self.getTextByXPath('//*[@id="product-details"]/h1')
+                            mfr_date = self.getTextById('lblDateFactory')
+                            row["Mfr Stock Date"] = "#N/A" if len(
+                                mfr_date) == 0 else parseDate(mfr_date)
+                            row["Stock"] = parseFloat(self.getTextByXPath('//*[@id="divInInstock"]/span'))
+                            row.update(self.getMfrDetail())
+                            row.update(self.getPriceList())
+                        elif self._source == UrlSource.miniCircuit:
+                            row['Mfr'] = "Mini-Circuits"
+                            try:
+                                row["Mfr PN"] = self.getTextByXPath( '//*[@id="content_area_home"]/section/section[1]/label[1]')
+                            except:
+                                break
+                            if len(browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/p/span')) != 0:
+                                mfr_date_text = self.getTextByXPath('//*[@id="model_price_section"]/div/p/span').split(":")
+                                print(mfr_date_text)
+                                row["On-Order Date"] = None if len(
+                                    mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"))
+                            if len(browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
+                                stock = self.getTextByXPath( '//*[@id="model_price_section"]/div/div[2]/span').split(" ")
+                                row["Stock"] = ">" + \
+                                    stock[-1] if len(stock) > 1 else stock[-1]
+                            if len(browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/table/thead/tr/th[1]')) != 0:
+                                row.update(self.getPriceList())
+                            if not "Stock" in row:
+                                row["Stock"]="No catalog"
+                    row["URL"] = browser.current_url
