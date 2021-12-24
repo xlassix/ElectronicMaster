@@ -236,3 +236,7 @@ class Scraper():
                         row["URL"] = browser.current_url
                     result_df = result_df.append(
                         row, ignore_index=True, sort=False)
+            else:
+                print("could not find `Query` in {}".format(excel))
+            result_df[_columns].to_excel(
+                path.join(_output_dir, str(timestamp)+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
