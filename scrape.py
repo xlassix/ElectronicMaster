@@ -1,3 +1,5 @@
+from selenium import webdriver
+from os import listdir, path, makedirs
 import pandas as pd
 from datetime import datetime
 from webdriver_manager.chrome import ChromeDriverManager
@@ -50,7 +52,19 @@ def getExcels(path: str) -> [str]:
     """
     return (list(filter(lambda elem: elem.endswith(".csv") or elem.endswith(".xlsx"), listdir(path))))
 
+def parseDefault(_str: str):
+    _data = _str.split('can ship')
+    result = [None, None]
+    if(len(_data) == 2):
+        try:
+            result[0] = parseFloat(_data[0])
+        except:
+            result[0] = None
+        result[1] = parseDate(_data[1])
 
+    return result
+
+    
 class UrlSource(enum.Enum):
     masterElectronics = 'masterelectronics.com'
     miniCircuit = 'mini-circuits.com'
@@ -58,10 +72,10 @@ class UrlSource(enum.Enum):
 
 class Scraper():
     def __init__(self, source: str):
-        assert source.lower() in ['masterelectronics.com', 'mini-circuits.com']
+        assert source.lower() in [val.value for val in UrlSource.__members__.values()],"source must be an element in {}".format([val.value for val in UrlSource.__members__.values()])
         self._browser = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()))
-        self._source = UrlSource.masterElectronics if UrlSource.masterElectronics.value == source.lower else UrlSource.miniCircuit if UrlSource.miniCircuit.value == source.lower() else None
+        self._source = UrlSource.masterElectronics if UrlSource.masterElectronics.value == source.lower() else UrlSource.miniCircuit if UrlSource.miniCircuit.value == source.lower() else None
 
     def getTextById(self, _id: str) -> str:
         """This Function Gets Text from the WebDriver Instance that matches the HTML AttributeId
@@ -85,7 +99,7 @@ class Scraper():
         """
         return self._browser.find_element(by=By.XPATH, value=xpath).text.replace(",", "")
 
-    def getItem(item: str) -> bool:
+    def getItem(self,item: str) -> bool:
         """This Function Checks if an item query as any results on the current page
             it returns true to indicate if on the right page and false if the search item returns no results
 
@@ -101,7 +115,7 @@ class Scraper():
         if self._source == UrlSource.miniCircuit:
             if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/header/a/img')) == 0:
                 sleep(8)  # bypass access denial
-                getItem(self._browser, item)
+                self.getItem(item)
             elif len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/label[1]')) > 0:
                 return False
             if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/div[1]')) > 0:
@@ -142,17 +156,6 @@ class Scraper():
             return dict(results)
         return dict()
 
-    def parseDefault(_str: str):
-        _data = _str.split('can ship')
-        result = [None, None]
-        if(len(_data) == 2):
-            try:
-                result[0] = parseFloat(_data[0])
-            except:
-                result[0] = None
-            result[1] = parseDate(_data[1])
-
-        return result
 
     def getMfrDetail(self) -> dict:
         """The function get manafacturers For ElectoricMaster.com on a product page
@@ -179,7 +182,7 @@ class Scraper():
             result["Min Order"] = parseFloat(data['Minimum Order:'])
         return result
 
-    def scrape(input_dir: str, output_dir=str):
+    def scrape(self,input_dir: str, output_dir:str):
         for excel in (getExcels(input_dir)):
             print('\n\n')
             result_df = pd.DataFrame(columns=_columns)
@@ -192,7 +195,7 @@ class Scraper():
             if ("Query" in present_columns):
                 for index, row in enumerate(raw_data.to_dict(orient='records')):
                     print("currently at index: {} \nData\t:{}".format(index, row))
-                    if getItem(browser, row["Query"]):
+                    if self.getItem(row["Query"]):
                         row['Run Datetime'] = timestamp
                         if self._source == UrlSource.masterElectronics:
                             row['Mfr'] = self.getTextByXPath(
@@ -218,7 +221,7 @@ class Scraper():
                                     '//*[@id="model_price_section"]/div/p/span').split(":")
                                 print(mfr_date_text)
                                 row["On-Order Date"] = None if len(
-                                    mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"))
+                                    mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"),"%m/%d/%Y")
                             if len(browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
                                 stock = self.getTextByXPath(
                                     '//*[@id="model_price_section"]/div/div[2]/span').split(" ")
@@ -240,3 +243,7 @@ class Scraper():
                 print("could not find `Query` in {}".format(excel))
             result_df[_columns].to_excel(
                 path.join(_output_dir, str(timestamp)+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
+
+if __name__ == "__main__":
+    scraper=Scraper('masterelectronics.com')
+    scraper.scrape(_dir,_output_dir)
