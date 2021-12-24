@@ -228,4 +228,11 @@ class Scraper():
                                 row.update(self.getPriceList())
                             if not "Stock" in row:
                                 row["Stock"] = "No catalog"
-                    row["URL"] = browser.current_url
+                    else:
+                        row['Run Datetime'] = timestamp
+                        row['Mfr'] = "No Result"
+                        row["Mfr PN"] = "No Result"
+                        row["Source"] = self._source.value
+                        row["URL"] = browser.current_url
+                    result_df = result_df.append(
+                        row, ignore_index=True, sort=False)
