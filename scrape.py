@@ -64,7 +64,7 @@ def parseDefault(_str: str):
 
     return result
 
-    
+
 class UrlSource(enum.Enum):
     masterElectronics = 'masterelectronics.com'
     miniCircuit = 'mini-circuits.com'
@@ -243,7 +243,7 @@ class Scraper():
                 print("could not find `Query` in {}".format(excel))
             result_df[_columns].to_excel(
                 path.join(_output_dir, str(timestamp)+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
-
+            self._browser.close()
 if __name__ == "__main__":
     scraper=Scraper('masterelectronics.com')
     scraper.scrape(_dir,_output_dir)
