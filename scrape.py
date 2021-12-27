@@ -235,15 +235,20 @@ class Scraper():
                         row['Run Datetime'] = timestamp
                         row['Mfr'] = "No Result"
                         row["Mfr PN"] = "No Result"
-                        row["Source"] = self._source.value
-                        row["URL"] = browser.current_url
+                    row["Source"] = self._source.value
+                    row["URL"] = self._browser.current_url
                     result_df = result_df.append(
                         row, ignore_index=True, sort=False)
             else:
                 print("could not find `Query` in {}".format(excel))
             result_df[_columns].to_excel(
                 path.join(_output_dir, str(timestamp)+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
+            
+
+        def close_browser(self):
             self._browser.close()
+            
 if __name__ == "__main__":
     scraper=Scraper('masterelectronics.com')
     scraper.scrape(_dir,_output_dir)
+    scraper.close_browser()
