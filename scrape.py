@@ -242,13 +242,17 @@ class Scraper():
             else:
                 print("could not find `Query` in {}".format(excel))
             result_df[_columns].to_excel(
-                path.join(_output_dir, str(timestamp)+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
+                path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
             
 
-        def close_browser(self):
-            self._browser.close()
-            
+    def close_browser(self):
+        self._browser.close()
+
 if __name__ == "__main__":
-    scraper=Scraper('masterelectronics.com')
-    scraper.scrape(_dir,_output_dir)
+    scraper=Scraper('mini-circuits.com')
+    scraper.scrape(input_dir=_dir,output_dir= _output_dir)
     scraper.close_browser()
+
+    scraper1=Scraper('masterelectronics.com')
+    scraper1.scrape(input_dir=_dir,output_dir= _output_dir)
+    scraper1.close_browser()
