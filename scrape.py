@@ -1,6 +1,7 @@
 from selenium import webdriver
 from os import listdir, path, makedirs
 import pandas as pd
+from time import sleep
 from datetime import datetime
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
@@ -125,12 +126,14 @@ class Scraper():
                     search_result_elem.click()
             return True
         if self._source == UrlSource.masterElectronics:
-            if(self._browser.current_url == url):
+            if(self._browser.current_url == url or "https://www.masterelectronics.com/en/productsearch/" in self._browser.current_url ):
                 self._browser.find_element(by=By.XPATH,
                                            value='//*[@id="search-content-results"]/div/div[2]/a[1]').click()
+                return True
             elif("https://www.masterelectronics.com/en/requestfornotifications" in self._browser.current_url):
                 return False
-            return True
+            elif self._browser.current_url.endswith(".html"):
+                return True
         return False
 
     def getPriceList(self) -> dict:
@@ -211,23 +214,21 @@ class Scraper():
                             row.update(self.getPriceList())
                         elif self._source == UrlSource.miniCircuit:
                             row['Mfr'] = "Mini-Circuits"
-                            try:
+                            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="content_area_home"]/section/section[1]/label[1]')) != 0:
                                 row["Mfr PN"] = self.getTextByXPath(
                                     '//*[@id="content_area_home"]/section/section[1]/label[1]')
-                            except:
-                                break
-                            if len(browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/p/span')) != 0:
+                            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/p/span')) != 0:
                                 mfr_date_text = self.getTextByXPath(
                                     '//*[@id="model_price_section"]/div/p/span').split(":")
                                 print(mfr_date_text)
                                 row["On-Order Date"] = None if len(
                                     mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"),"%m/%d/%Y")
-                            if len(browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
+                            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
                                 stock = self.getTextByXPath(
                                     '//*[@id="model_price_section"]/div/div[2]/span').split(" ")
                                 row["Stock"] = ">" + \
                                     stock[-1] if len(stock) > 1 else stock[-1]
-                            if len(browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/table/thead/tr/th[1]')) != 0:
+                            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/table/thead/tr/th[1]')) != 0:
                                 row.update(self.getPriceList())
                             if not "Stock" in row:
                                 row["Stock"] = "No catalog"
@@ -249,10 +250,10 @@ class Scraper():
         self._browser.close()
 
 if __name__ == "__main__":
-    scraper=Scraper('mini-circuits.com')
-    scraper.scrape(input_dir=_dir,output_dir= _output_dir)
-    scraper.close_browser()
-
     scraper1=Scraper('masterelectronics.com')
     scraper1.scrape(input_dir=_dir,output_dir= _output_dir)
     scraper1.close_browser()
+
+    scraper=Scraper('mini-circuits.com')
+    scraper.scrape(input_dir=_dir,output_dir= _output_dir)
+    scraper.close_browser()
