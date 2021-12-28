@@ -53,6 +53,7 @@ def getExcels(path: str) -> [str]:
     """
     return (list(filter(lambda elem: elem.endswith(".csv") or elem.endswith(".xlsx"), listdir(path))))
 
+
 def parseDefault(_str: str):
     _data = _str.split('can ship')
     result = [None, None]
@@ -73,10 +74,12 @@ class UrlSource(enum.Enum):
 
 class Scraper():
     def __init__(self, source: str):
-        assert source.lower() in [val.value for val in UrlSource.__members__.values()],"source must be an element in {}".format([val.value for val in UrlSource.__members__.values()])
+        assert source.lower() in [val.value for val in UrlSource.__members__.values(
+        )], "source must be an element in {}".format([val.value for val in UrlSource.__members__.values()])
         self._browser = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()))
-        self._source = UrlSource.masterElectronics if UrlSource.masterElectronics.value == source.lower() else UrlSource.miniCircuit if UrlSource.miniCircuit.value == source.lower() else None
+        self._source = UrlSource.masterElectronics if UrlSource.masterElectronics.value == source.lower(
+        ) else UrlSource.miniCircuit if UrlSource.miniCircuit.value == source.lower() else None
 
     def getTextById(self, _id: str) -> str:
         """This Function Gets Text from the WebDriver Instance that matches the HTML AttributeId
@@ -100,7 +103,7 @@ class Scraper():
         """
         return self._browser.find_element(by=By.XPATH, value=xpath).text.replace(",", "")
 
-    def getItem(self,item: str) -> bool:
+    def getItem(self, item: str) -> bool:
         """This Function Checks if an item query as any results on the current page
             it returns true to indicate if on the right page and false if the search item returns no results
 
@@ -126,7 +129,7 @@ class Scraper():
                     search_result_elem.click()
             return True
         if self._source == UrlSource.masterElectronics:
-            if(self._browser.current_url == url or "https://www.masterelectronics.com/en/productsearch/" in self._browser.current_url ):
+            if(self._browser.current_url == url or "https://www.masterelectronics.com/en/productsearch/" in self._browser.current_url):
                 self._browser.find_element(by=By.XPATH,
                                            value='//*[@id="search-content-results"]/div/div[2]/a[1]').click()
                 return True
@@ -159,7 +162,6 @@ class Scraper():
             return dict(results)
         return dict()
 
-
     def getMfrDetail(self) -> dict:
         """The function get manafacturers For ElectoricMaster.com on a product page
 
@@ -185,7 +187,7 @@ class Scraper():
             result["Min Order"] = parseFloat(data['Minimum Order:'])
         return result
 
-    def scrape(self,input_dir: str, output_dir:str):
+    def scrape(self, input_dir: str, output_dir: str):
         for excel in (getExcels(input_dir)):
             print('\n\n')
             result_df = pd.DataFrame(columns=_columns)
@@ -222,7 +224,7 @@ class Scraper():
                                     '//*[@id="model_price_section"]/div/p/span').split(":")
                                 print(mfr_date_text)
                                 row["On-Order Date"] = None if len(
-                                    mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"),"%m/%d/%Y")
+                                    mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"), "%m/%d/%Y")
                             if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
                                 stock = self.getTextByXPath(
                                     '//*[@id="model_price_section"]/div/div[2]/span').split(" ")
@@ -244,16 +246,16 @@ class Scraper():
                 print("could not find `Query` in {}".format(excel))
             result_df[_columns].to_excel(
                 path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
-            
 
     def close_browser(self):
         self._browser.close()
 
+
 if __name__ == "__main__":
-    scraper1=Scraper('masterelectronics.com')
-    scraper1.scrape(input_dir=_dir,output_dir= _output_dir)
+    scraper1 = Scraper('masterelectronics.com')
+    scraper1.scrape(input_dir=_dir, output_dir=_output_dir)
     scraper1.close_browser()
 
-    scraper=Scraper('mini-circuits.com')
-    scraper.scrape(input_dir=_dir,output_dir= _output_dir)
+    scraper = Scraper('mini-circuits.com')
+    scraper.scrape(input_dir=_dir, output_dir=_output_dir)
     scraper.close_browser()
