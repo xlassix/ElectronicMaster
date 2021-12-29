@@ -7,7 +7,6 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from datetime import date, datetime
 
-options = webdriver.ChromeOptions()
 
 # basic input folders
 _dir = "input"
@@ -196,5 +195,4 @@ def main():
     browser.close()
 
 
-if __name__ == "__main__":
-    main()
+C
