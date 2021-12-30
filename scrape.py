@@ -169,6 +169,13 @@ class MasterElectronicsScraper(BasicScraper):
         return result
 
     def scrape(self, input_dir: str, output_dir: str):
+        """This method reads all the excels in Xlsx and csv format from the specified input directory and writes the scraped output 
+        into the corresponding output directory
+
+        Args:
+            input_dir (str): Input directory
+            output_dir (str): Output Directory
+        """
         for excel in (getExcels(input_dir)):
             print('\n\n')
             result_df = pd.DataFrame(columns=_columns)
@@ -215,31 +222,31 @@ class MiniCircuitScraper(BasicScraper):
         self._source=UrlSource.miniCircuit
 
     def getItem(self, item: str) -> bool:
-            """This Function Checks if an item query as any results on the current page
-                it returns true to indicate if on the right page and false if the search item returns no results
+        """This method Checks if an item query as any results on the current page
+            it returns true to indicate if on the right page and false if the search item returns no results
 
-            Args:
-                item (str): Query
+        Args:
+            item (str): Query
 
-            Returns:
-                bool
-            """
-            url = "https://www.minicircuits.com/WebStore/modelSearch.html?model={0}".format(item)
-            self._browser.get(url)
-            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/header/a/img')) == 0:
-                sleep(8)  # bypass access denial
-                self.getItem(item)
-            elif len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/label[1]')) > 0:
-                return False
-            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/div[1]')) > 0:
-                search_result_elem = self._browser.find_element(by=By.XPATH,
-                                                                value='//*[@id="wrapper"]/section/div[1]/div[1]/a')
-                if(self._browser.current_url == url):
-                    search_result_elem.click()
-            return True
+        Returns:
+            bool
+        """
+        url = "https://www.minicircuits.com/WebStore/modelSearch.html?model={0}".format(item)
+        self._browser.get(url)
+        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/header/a/img')) == 0:
+            sleep(8)  # bypass access denial
+            self.getItem(item)
+        elif len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/label[1]')) > 0:
+            return False
+        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/div[1]')) > 0:
+            search_result_elem = self._browser.find_element(by=By.XPATH,
+                                                            value='//*[@id="wrapper"]/section/div[1]/div[1]/a')
+            if(self._browser.current_url == url):
+                search_result_elem.click()
+        return True
 
     def getPriceList(self) -> dict:
-        """This function get the Price list(dict) For UrlSource on a product page
+        """This method get the Price list(dict) For UrlSource on a product page
 
         Args:
             browser (webdriver): Selenium.WebDriver
@@ -255,12 +262,19 @@ class MiniCircuitScraper(BasicScraper):
         return dict(results)
 
     def scrape(self, input_dir: str, output_dir: str):
-        for excel in (getExcels(input_dir)):
+        """This method reads all the excels in Xlsx and csv format from the specified input directory and writes the scraped output 
+        into the corresponding output directory
+
+        Args:
+            input_dir (str): Input directory
+            output_dir (str): Output Directory
+        """
+        for excel in (getExcels(input_dir)): #get excels
             print('\n\n')
-            result_df = pd.DataFrame(columns=_columns)
-            timestamp = datetime.now()
+            result_df = pd.DataFrame(columns=_columns) # initialise result DataFrame
+            timestamp = datetime.now() # current time
             raw_data = pd.read_excel(path.join(_dir, excel)) if excel.endswith(
-                '.xlsx') else pd.read_csv(path.join(_dir, excel))
+                '.xlsx') else pd.read_csv(path.join(_dir, excel)) 
             present_columns = set(raw_data.columns).intersection(
                 ['Internal Part Number', 'Description', 'Manufacturer', 'Query', 'Qty'])
             print(raw_data)
