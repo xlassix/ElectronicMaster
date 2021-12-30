@@ -72,14 +72,10 @@ class UrlSource(enum.Enum):
     miniCircuit = 'mini-circuits.com'
 
 
-class Scraper():
-    def __init__(self, source: str):
-        assert source.lower() in [val.value for val in UrlSource.__members__.values(
-        )], "source must be an element in {}".format([val.value for val in UrlSource.__members__.values()])
+class BasicScraper():
+    def __init__(self,):
         self._browser = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()))
-        self._source = UrlSource.masterElectronics if UrlSource.masterElectronics.value == source.lower(
-        ) else UrlSource.miniCircuit if UrlSource.miniCircuit.value == source.lower() else None
 
     def getTextById(self, _id: str) -> str:
         """This Function Gets Text from the WebDriver Instance that matches the HTML AttributeId
@@ -103,6 +99,14 @@ class Scraper():
         """
         return self._browser.find_element(by=By.XPATH, value=xpath).text.replace(",", "")
 
+    def close_browser(self):
+        self._browser.close()
+
+    def __del__(self):
+        self._browser.close()
+
+class MasterElectronicsScraper(BasicScraper):
+
     def getItem(self, item: str) -> bool:
         """This Function Checks if an item query as any results on the current page
             it returns true to indicate if on the right page and false if the search item returns no results
@@ -113,60 +117,31 @@ class Scraper():
         Returns:
             bool
         """
-        url = "https://www.masterelectronics.com/en/keywordsearch?text={0}".format(
-            item) if self._source == UrlSource.masterElectronics else "https://www.minicircuits.com/WebStore/modelSearch.html?model={0}".format(item)
+        url = "https://www.masterelectronics.com/en/keywordsearch?text={0}".format(item)
         self._browser.get(url)
-        if self._source == UrlSource.miniCircuit:
-            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/header/a/img')) == 0:
-                sleep(8)  # bypass access denial
-                self.getItem(item)
-            elif len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/label[1]')) > 0:
-                return False
-            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/div[1]')) > 0:
-                search_result_elem = self._browser.find_element(by=By.XPATH,
-                                                                value='//*[@id="wrapper"]/section/div[1]/div[1]/a')
-                if(self._browser.current_url == url):
-                    search_result_elem.click()
+        if(self._browser.current_url == url or "https://www.masterelectronics.com/en/productsearch/" in self._browser.current_url):
+            self._browser.find_element(by=By.XPATH,
+                                        value='//*[@id="search-content-results"]/div/div[2]/a[1]').click()
             return True
-        if self._source == UrlSource.masterElectronics:
-            if(self._browser.current_url == url or "https://www.masterelectronics.com/en/productsearch/" in self._browser.current_url):
-                self._browser.find_element(by=By.XPATH,
-                                           value='//*[@id="search-content-results"]/div/div[2]/a[1]').click()
-                return True
-            elif("https://www.masterelectronics.com/en/requestfornotifications" in self._browser.current_url):
-                return False
-            elif self._browser.current_url.endswith(".html"):
-                return True
+        elif("https://www.masterelectronics.com/en/requestfornotifications" in self._browser.current_url):
+            return False
+        elif self._browser.current_url.endswith(".html"):
+            return True
         return False
 
     def getPriceList(self) -> dict:
-        """This function get the Price list(dict) For UrlSource on a product page
-
-        Args:
-            browser (webdriver): Selenium.WebDriver
+        """This function get the Price list(dict) For UrlSource on product page
 
         Returns:
             dict
         """
-        if UrlSource.masterElectronics == self._source:
-            data = self.getTextById('divPriceListLeft').split("\n")[3:]
-            del data[2::3]
-            return(dict(("PB{} Qty".format(index//2+1), parseFloat(i)) if(index % 2 == 0)
-                        else ("PB{} $".format(index//2+1), parseFloat(i)) for index, i in enumerate(data[:20])))
-        elif UrlSource.miniCircuit == self._source:
-            data = list(map(lambda x: list(map(lambda y: y.split(" ")[0], x.split(
-                " $"))), self.getTextByXPath('//*[@id="model_price_section"]/table').split("\n")[1:]))
-            results = []
-            list(results.extend([("PB{} Qty".format(index+1), parseFloat(i[0])),
-                                 ("PB{} $".format(index+1), parseFloat(i[1]))]) for index, i in enumerate(data[:20]))
-            return dict(results)
-        return dict()
+        data = self.getTextById('divPriceListLeft').split("\n")[3:]
+        del data[2::3]
+        return(dict(("PB{} Qty".format(index//2+1), parseFloat(i)) if(index % 2 == 0)
+                    else ("PB{} $".format(index//2+1), parseFloat(i)) for index, i in enumerate(data[:20])))
 
     def getMfrDetail(self) -> dict:
         """The function get manafacturers For ElectoricMaster.com on a product page
-
-        Args:
-            browser (webdriver): Selenium.WebDriver
 
         Returns:
             dict
@@ -202,38 +177,17 @@ class Scraper():
                     print("currently at index: {} \nData\t:{}".format(index, row))
                     if self.getItem(row["Query"]):
                         row['Run Datetime'] = timestamp
-                        if self._source == UrlSource.masterElectronics:
-                            row['Mfr'] = self.getTextByXPath(
-                                '//*[@id="product-details"]/a')
-                            row["Mfr PN"] = self.getTextByXPath(
-                                '//*[@id="product-details"]/h1')
-                            mfr_date = self.getTextById('lblDateFactory')
-                            row["Mfr Stock Date"] = "#N/A" if len(
-                                mfr_date) == 0 else parseDate(mfr_date)
-                            row["Stock"] = parseFloat(
-                                self.getTextByXPath('//*[@id="divInInstock"]/span'))
-                            row.update(self.getMfrDetail())
-                            row.update(self.getPriceList())
-                        elif self._source == UrlSource.miniCircuit:
-                            row['Mfr'] = "Mini-Circuits"
-                            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="content_area_home"]/section/section[1]/label[1]')) != 0:
-                                row["Mfr PN"] = self.getTextByXPath(
-                                    '//*[@id="content_area_home"]/section/section[1]/label[1]')
-                            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/p/span')) != 0:
-                                mfr_date_text = self.getTextByXPath(
-                                    '//*[@id="model_price_section"]/div/p/span').split(":")
-                                print(mfr_date_text)
-                                row["On-Order Date"] = None if len(
-                                    mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"), "%m/%d/%Y")
-                            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
-                                stock = self.getTextByXPath(
-                                    '//*[@id="model_price_section"]/div/div[2]/span').split(" ")
-                                row["Stock"] = ">" + \
-                                    stock[-1] if len(stock) > 1 else stock[-1]
-                            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/table/thead/tr/th[1]')) != 0:
-                                row.update(self.getPriceList())
-                            if not "Stock" in row:
-                                row["Stock"] = "No catalog"
+                        row['Mfr'] = self.getTextByXPath(
+                            '//*[@id="product-details"]/a')
+                        row["Mfr PN"] = self.getTextByXPath(
+                            '//*[@id="product-details"]/h1')
+                        mfr_date = self.getTextById('lblDateFactory')
+                        row["Mfr Stock Date"] = "#N/A" if len(
+                            mfr_date) == 0 else parseDate(mfr_date)
+                        row["Stock"] = parseFloat(
+                            self.getTextByXPath('//*[@id="divInInstock"]/span'))
+                        row.update(self.getMfrDetail())
+                        row.update(self.getPriceList())
                     else:
                         row['Run Datetime'] = timestamp
                         row['Mfr'] = "No Result"
@@ -247,15 +201,12 @@ class Scraper():
             result_df[_columns].to_excel(
                 path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
 
-    def close_browser(self):
-        self._browser.close()
 
 
 if __name__ == "__main__":
-    scraper1 = Scraper('masterelectronics.com')
-    scraper1.scrape(input_dir=_dir, output_dir=_output_dir)
-    scraper1.close_browser()
+    # scraper1 = Scraper('masterelectronics.com')
+    # scraper1.scrape(input_dir=_dir, output_dir=_output_dir)
+    # scraper1.close_browser()
 
-    scraper = Scraper('mini-circuits.com')
+    scraper = MasterElectronicsScraper()
     scraper.scrape(input_dir=_dir, output_dir=_output_dir)
-    scraper.close_browser()
