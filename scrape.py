@@ -108,6 +108,10 @@ class BasicScraper():
 
 class MasterElectronicsScraper(BasicScraper):
 
+    def __init__(self):
+        super().__init__()
+        self._source=UrlSource.masterElectronics
+
     def getItem(self, item: str) -> bool:
         """This Function Checks if an item query as any results on the current page
             it returns true to indicate if on the right page and false if the search item returns no results
@@ -204,10 +208,102 @@ class MasterElectronicsScraper(BasicScraper):
                 path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
 
 
-if __name__ == "__main__":
-    # scraper1 = Scraper('masterelectronics.com')
-    # scraper1.scrape(input_dir=_dir, output_dir=_output_dir)
-    # scraper1.close_browser()
+class MiniCircuitScraper(BasicScraper):
 
-    scraper = MasterElectronicsScraper()
+    def __init__(self):
+        super().__init__()
+        self._source=UrlSource.miniCircuit
+
+    def getItem(self, item: str) -> bool:
+            """This Function Checks if an item query as any results on the current page
+                it returns true to indicate if on the right page and false if the search item returns no results
+
+            Args:
+                item (str): Query
+
+            Returns:
+                bool
+            """
+            url = "https://www.minicircuits.com/WebStore/modelSearch.html?model={0}".format(item)
+            self._browser.get(url)
+            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/header/a/img')) == 0:
+                sleep(8)  # bypass access denial
+                self.getItem(item)
+            elif len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/label[1]')) > 0:
+                return False
+            if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/div[1]')) > 0:
+                search_result_elem = self._browser.find_element(by=By.XPATH,
+                                                                value='//*[@id="wrapper"]/section/div[1]/div[1]/a')
+                if(self._browser.current_url == url):
+                    search_result_elem.click()
+            return True
+
+    def getPriceList(self) -> dict:
+        """This function get the Price list(dict) For UrlSource on a product page
+
+        Args:
+            browser (webdriver): Selenium.WebDriver
+
+        Returns:
+            dict
+        """
+        data = list(map(lambda x: list(map(lambda y: y.split(" ")[0], x.split(
+            " $"))), self.getTextByXPath('//*[@id="model_price_section"]/table').split("\n")[1:]))
+        results = []
+        list(results.extend([("PB{} Qty".format(index+1), parseFloat(i[0])),
+                            ("PB{} $".format(index+1), parseFloat(i[1]))]) for index, i in enumerate(data[:20]))
+        return dict(results)
+
+    def scrape(self, input_dir: str, output_dir: str):
+        for excel in (getExcels(input_dir)):
+            print('\n\n')
+            result_df = pd.DataFrame(columns=_columns)
+            timestamp = datetime.now()
+            raw_data = pd.read_excel(path.join(_dir, excel)) if excel.endswith(
+                '.xlsx') else pd.read_csv(path.join(_dir, excel))
+            present_columns = set(raw_data.columns).intersection(
+                ['Internal Part Number', 'Description', 'Manufacturer', 'Query', 'Qty'])
+            print(raw_data)
+            if ("Query" in present_columns):
+                for index, row in enumerate(raw_data.to_dict(orient='records')):
+                    print("currently at index: {} \nData\t:{}".format(index, row))
+                    if self.getItem(row["Query"]):
+                        row['Run Datetime'] = timestamp
+                        row['Mfr'] = "Mini-Circuits"
+                        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="content_area_home"]/section/section[1]/label[1]')) != 0:
+                            row["Mfr PN"] = self.getTextByXPath(
+                                '//*[@id="content_area_home"]/section/section[1]/label[1]')
+                        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/p/span')) != 0:
+                            mfr_date_text = self.getTextByXPath(
+                                '//*[@id="model_price_section"]/div/p/span').split(":")
+                            print(mfr_date_text)
+                            row["On-Order Date"] = None if len(
+                                mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"), "%m/%d/%Y")
+                        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
+                            stock = self.getTextByXPath(
+                                '//*[@id="model_price_section"]/div/div[2]/span').split(" ")
+                            row["Stock"] = ">" + \
+                                stock[-1] if len(stock) > 1 else stock[-1]
+                        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/table/thead/tr/th[1]')) != 0:
+                            row.update(self.getPriceList())
+                        if not "Stock" in row:
+                            row["Stock"] = "No catalog"
+                    else:
+                        row['Run Datetime'] = timestamp
+                        row['Mfr'] = "No Result"
+                        row["Mfr PN"] = "No Result"
+                    row["Source"] = self._source.value
+                    row["URL"] = self._browser.current_url
+                    result_df = result_df.append(
+                        row, ignore_index=True, sort=False)
+            else:
+                print("could not find `Query` in {}".format(excel))
+            result_df[_columns].to_excel(
+                path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
+
+if __name__ == "__main__":
+    # scraper = MasterElectronicsScraper()
+    # scraper.scrape(input_dir=_dir, output_dir=_output_dir)
+
+    scraper = MiniCircuitScraper()
     scraper.scrape(input_dir=_dir, output_dir=_output_dir)
