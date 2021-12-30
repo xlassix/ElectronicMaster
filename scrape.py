@@ -105,6 +105,7 @@ class BasicScraper():
     def __del__(self):
         self._browser.close()
 
+
 class MasterElectronicsScraper(BasicScraper):
 
     def getItem(self, item: str) -> bool:
@@ -117,11 +118,12 @@ class MasterElectronicsScraper(BasicScraper):
         Returns:
             bool
         """
-        url = "https://www.masterelectronics.com/en/keywordsearch?text={0}".format(item)
+        url = "https://www.masterelectronics.com/en/keywordsearch?text={0}".format(
+            item)
         self._browser.get(url)
         if(self._browser.current_url == url or "https://www.masterelectronics.com/en/productsearch/" in self._browser.current_url):
             self._browser.find_element(by=By.XPATH,
-                                        value='//*[@id="search-content-results"]/div/div[2]/a[1]').click()
+                                       value='//*[@id="search-content-results"]/div/div[2]/a[1]').click()
             return True
         elif("https://www.masterelectronics.com/en/requestfornotifications" in self._browser.current_url):
             return False
@@ -200,7 +202,6 @@ class MasterElectronicsScraper(BasicScraper):
                 print("could not find `Query` in {}".format(excel))
             result_df[_columns].to_excel(
                 path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
-
 
 
 if __name__ == "__main__":
