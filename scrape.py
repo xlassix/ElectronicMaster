@@ -17,63 +17,13 @@ _columns = ['Internal Part Number', 'Description', 'Manufacturer', 'Query',
             'Qty', 'Run Datetime', "Stock", "Mfr PN", "Mfr", "Mfr Stock", "Mfr Stock Date", 'On-Order', 'On-Order Date', "Lead-Time", "Min Order",
             "PB1 Qty", "PB2 Qty", "PB3 Qty", "PB4 Qty", "PB5 Qty", "PB6 Qty", "PB7 Qty", "PB8 Qty",	"PB9 Qty", "PB10 Qty", "PB1 $",	"PB2 $", "PB3 $",	"PB4 $",	"PB5 $",	"PB6 $",	"PB7 $",	"PB8 $",	"PB9 $", "PB10 $",	"URL"]
 
-
-def parseDate(dateStr: str, dateFormat: str = "%m/%d/%y") -> date:
-    """This function takes a date string in the format `dateFormat` and returns a datetime object
-
-    Args:
-        dateStr (str)       : date string Example 5/30/22
-        dateFormat (str)    : date format for example "%m/%d/%y"
-    Returns:
-        date: datetime.date
-    """
-    return datetime.strptime(dateStr.strip(), dateFormat).date()
-
-
-def parseFloat(_number: str) -> float:
-    """This function takes in a string strips unwanted symbols like $ and + and parses it to a float
-
-    Args:
-        _number (str): for example $5.0 or 10000+
-
-    Returns:
-        float:
-    """
-    return float(_number.strip().strip("+").strip("$"))
-
-
-def getExcels(path: str) -> [str]:
-    """This function returns the list of excel in path
-
-    Args:
-        path (str)
-
-    Returns:
-        [str]: list of excel(.xlsx) in path
-    """
-    return (list(filter(lambda elem: elem.endswith(".csv") or elem.endswith(".xlsx"), listdir(path))))
-
-
-def parseDefault(_str: str):
-    _data = _str.split('can ship')
-    result = [None, None]
-    if(len(_data) == 2):
-        try:
-            result[0] = parseFloat(_data[0])
-        except:
-            result[0] = None
-        result[1] = parseDate(_data[1])
-
-    return result
-
-
 class UrlSource(enum.Enum):
     masterElectronics = 'masterelectronics.com'
     miniCircuit = 'mini-circuits.com'
 
 
 class BasicScraper():
-    def __init__(self,):
+    def __init__(self):
         self._browser = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()))
 
@@ -105,12 +55,79 @@ class BasicScraper():
     def __del__(self):
         self._browser.close()
 
+    @staticmethod
+    def parseDate(dateStr: str, dateFormat: str = "%m/%d/%y") -> date:
+        """This function takes a date string in the format `dateFormat` and returns a datetime object
+
+        Args:
+            dateStr (str)       : date string Example 5/30/22
+            dateFormat (str)    : date format for example "%m/%d/%y"
+        Returns:
+            date: datetime.date
+        """
+        return datetime.strptime(dateStr.strip(), dateFormat).date()
+
+    @staticmethod
+    def parseFloat(_number: str) -> float:
+        """This static method takes in a string strips unwanted symbols like $ and + and parses it to a float
+
+        Args:
+            _number (str): for example $5.0 or 10000+
+
+        Returns:
+            float:
+        """
+        return float(_number.strip().strip("+").strip("$"))
+
+    @staticmethod
+    def getExcels(path: str) -> [str]:
+        """This static method returns the list of excel in path
+
+        Args:
+            path (str)
+
+        Returns:
+            [str]: list of excel(.xlsx) in path
+        """
+        return (list(filter(lambda elem: elem.endswith(".csv") or elem.endswith(".xlsx"), listdir(path))))
+
+
+
+    def isElementPresent(self,xpath:str,order=0):
+        """This method looks up an xpath if it exists then the first element is return 
+        else None
+
+        Args:
+            xpath (str): xpath 
+            order (int, optional): more than one element that fits this xpath might be found.
+             Hence Defaults to 0(first element).
+
+        Returns:
+            Option<Str>: String or None
+        """
+        data=self._browser.find_elements(by=By.XPATH, value=xpath)
+        if len(data) != 0:
+            return data[order]
+        return None
+
 
 class MasterElectronicsScraper(BasicScraper):
 
     def __init__(self):
         super().__init__()
         self._source=UrlSource.masterElectronics
+
+    def parseDefault(self, _str: str):
+        _data = _str.split('can ship')
+        result = [None, None]
+        if(len(_data) == 2):
+            try:
+                result[0] = self.parseFloat(_data[0])
+            except:
+                result[0] = None
+            result[1] = self.parseDate(_data[1])
+
+        return result
 
     def getItem(self, item: str) -> bool:
         """This Function Checks if an item query as any results on the current page
@@ -143,8 +160,8 @@ class MasterElectronicsScraper(BasicScraper):
         """
         data = self.getTextById('divPriceListLeft').split("\n")[3:]
         del data[2::3]
-        return(dict(("PB{} Qty".format(index//2+1), parseFloat(i)) if(index % 2 == 0)
-                    else ("PB{} $".format(index//2+1), parseFloat(i)) for index, i in enumerate(data[:20])))
+        return(dict(("PB{} Qty".format(index//2+1), self.parseFloat(i)) if(index % 2 == 0)
+                    else ("PB{} $".format(index//2+1), self.parseFloat(i)) for index, i in enumerate(data[:20])))
 
     def getMfrDetail(self) -> dict:
         """The function get manafacturers For ElectoricMaster.com on a product page
@@ -156,16 +173,16 @@ class MasterElectronicsScraper(BasicScraper):
         data = self.getTextByXPath('//*[@id="divDefault"]/div/div').split("\n")
         data = dict((i, j) for i, j in zip(data[::2], data[1::2]))
         if ("Factory Lead-Time" in data):
-            result['Lead-Time'] = parseFloat(
+            result['Lead-Time'] = self.parseFloat(
                 data["Factory Lead-Time"].lower().split("weeks")[0])
         if('Manufacturer Stock:' in data):
             [result['Mfr Stock'], result["Mfr Stock Date"]
-             ] = parseDefault(data['Manufacturer Stock:'])
+             ] = self.parseDefault(data['Manufacturer Stock:'])
         if('On Order:' in data):
             [result['On-Order'], result["On-Order Date"]
-             ] = parseDefault(data['On Order:'])
+             ] = self.parseDefault(data['On Order:'])
         if('Minimum Order:' in data):
-            result["Min Order"] = parseFloat(data['Minimum Order:'])
+            result["Min Order"] = self.parseFloat(data['Minimum Order:'])
         return result
 
     def scrape(self, input_dir: str, output_dir: str):
@@ -176,7 +193,7 @@ class MasterElectronicsScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        for excel in (getExcels(input_dir)):
+        for excel in (self.getExcels(input_dir)):
             print('\n\n')
             result_df = pd.DataFrame(columns=_columns)
             timestamp = datetime.now()
@@ -196,8 +213,8 @@ class MasterElectronicsScraper(BasicScraper):
                             '//*[@id="product-details"]/h1')
                         mfr_date = self.getTextById('lblDateFactory')
                         row["Mfr Stock Date"] = "#N/A" if len(
-                            mfr_date) == 0 else parseDate(mfr_date)
-                        row["Stock"] = parseFloat(
+                            mfr_date) == 0 else self.parseDate(mfr_date)
+                        row["Stock"] = self.parseFloat(
                             self.getTextByXPath('//*[@id="divInInstock"]/span'))
                         row.update(self.getMfrDetail())
                         row.update(self.getPriceList())
@@ -257,8 +274,8 @@ class MiniCircuitScraper(BasicScraper):
         data = list(map(lambda x: list(map(lambda y: y.split(" ")[0], x.split(
             " $"))), self.getTextByXPath('//*[@id="model_price_section"]/table').split("\n")[1:]))
         results = []
-        list(results.extend([("PB{} Qty".format(index+1), parseFloat(i[0])),
-                            ("PB{} $".format(index+1), parseFloat(i[1]))]) for index, i in enumerate(data[:20]))
+        list(results.extend([("PB{} Qty".format(index+1), self.parseFloat(i[0])),
+                            ("PB{} $".format(index+1), self.parseFloat(i[1]))]) for index, i in enumerate(data[:20]))
         return dict(results)
 
     def scrape(self, input_dir: str, output_dir: str):
@@ -269,7 +286,7 @@ class MiniCircuitScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        for excel in (getExcels(input_dir)): #get excels
+        for excel in (self.getExcels(input_dir)): #get excels
             print('\n\n')
             result_df = pd.DataFrame(columns=_columns) # initialise result DataFrame
             timestamp = datetime.now() # current time
@@ -284,21 +301,17 @@ class MiniCircuitScraper(BasicScraper):
                     if self.getItem(row["Query"]):
                         row['Run Datetime'] = timestamp
                         row['Mfr'] = "Mini-Circuits"
-                        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="content_area_home"]/section/section[1]/label[1]')) != 0:
-                            row["Mfr PN"] = self.getTextByXPath(
-                                '//*[@id="content_area_home"]/section/section[1]/label[1]')
-                        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/p/span')) != 0:
-                            mfr_date_text = self.getTextByXPath(
-                                '//*[@id="model_price_section"]/div/p/span').split(":")
-                            print(mfr_date_text)
+                        row["Mfr PN"] = self.isElementPresent('//*[@id="content_area_home"]/section/section[1]/label[1]')
+                        mfr_date_text = self.isElementPresent('//*[@id="model_price_section"]/div/p/span')
+                        if mfr_date_text:
                             row["On-Order Date"] = None if len(
-                                mfr_date_text) < 2 else parseDate(mfr_date_text[1].strip("*"), "%m/%d/%Y")
+                                mfr_date_text.split(":")) < 2 else self.parseDate(mfr_date_text.split(":")[1].strip("*"), "%m/%d/%Y")
                         if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
                             stock = self.getTextByXPath(
                                 '//*[@id="model_price_section"]/div/div[2]/span').split(" ")
                             row["Stock"] = ">" + \
                                 stock[-1] if len(stock) > 1 else stock[-1]
-                        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/table/thead/tr/th[1]')) != 0:
+                        if self.isElementPresent('//*[@id="model_price_section"]/table/thead/tr/th[1]'):
                             row.update(self.getPriceList())
                         if not "Stock" in row:
                             row["Stock"] = "No catalog"
