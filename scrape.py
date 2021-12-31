@@ -8,6 +8,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from datetime import date, datetime
 import enum
+import argparse
 
 
 _dir = "input"
@@ -16,6 +17,7 @@ makedirs(_output_dir, exist_ok=True)
 _columns = ['Internal Part Number', 'Description', 'Manufacturer', 'Query',
             'Qty', 'Run Datetime', "Stock", "Mfr PN", "Mfr", "Mfr Stock", "Mfr Stock Date", 'On-Order', 'On-Order Date', "Lead-Time", "Min Order",
             "PB1 Qty", "PB2 Qty", "PB3 Qty", "PB4 Qty", "PB5 Qty", "PB6 Qty", "PB7 Qty", "PB8 Qty",	"PB9 Qty", "PB10 Qty", "PB1 $",	"PB2 $", "PB3 $",	"PB4 $",	"PB5 $",	"PB6 $",	"PB7 $",	"PB8 $",	"PB9 $", "PB10 $",	"URL"]
+
 
 class UrlSource(enum.Enum):
     masterElectronics = 'masterelectronics.com'
@@ -91,9 +93,7 @@ class BasicScraper():
         """
         return (list(filter(lambda elem: elem.endswith(".csv") or elem.endswith(".xlsx"), listdir(path))))
 
-
-
-    def isElementPresent(self,xpath:str,order=0):
+    def isElementPresent(self, xpath: str, order=0):
         """This method looks up an xpath if it exists then the first element is return 
         else None
 
@@ -105,9 +105,9 @@ class BasicScraper():
         Returns:
             Option<Str>: String or None
         """
-        data=self._browser.find_elements(by=By.XPATH, value=xpath)
+        data = self._browser.find_elements(by=By.XPATH, value=xpath)
         if len(data) != 0:
-            return data[order]
+            return data[order].text
         return None
 
 
@@ -115,7 +115,7 @@ class MasterElectronicsScraper(BasicScraper):
 
     def __init__(self):
         super().__init__()
-        self._source=UrlSource.masterElectronics
+        self._source = UrlSource.masterElectronics
 
     def parseDefault(self, _str: str):
         _data = _str.split('can ship')
@@ -193,18 +193,32 @@ class MasterElectronicsScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        for excel in (self.getExcels(input_dir)):
+        for excel in (self.getExcels(input_dir)):  # get excels
             print('\n\n')
+
+            # initialise result DataFrame
             result_df = pd.DataFrame(columns=_columns)
+
+            # current time
             timestamp = datetime.now()
+
+            # read csv into pandas
             raw_data = pd.read_excel(path.join(_dir, excel)) if excel.endswith(
                 '.xlsx') else pd.read_csv(path.join(_dir, excel))
+
+            # query Present columns
             present_columns = set(raw_data.columns).intersection(
                 ['Internal Part Number', 'Description', 'Manufacturer', 'Query', 'Qty'])
             print(raw_data)
+
+            # check if Query exists
             if ("Query" in present_columns):
+
+                # iterate over each row in the pandas DataFrame
                 for index, row in enumerate(raw_data.to_dict(orient='records')):
                     print("currently at index: {} \nData\t:{}".format(index, row))
+
+                    # get to Product/item Page if it exists
                     if self.getItem(row["Query"]):
                         row['Run Datetime'] = timestamp
                         row['Mfr'] = self.getTextByXPath(
@@ -236,7 +250,7 @@ class MiniCircuitScraper(BasicScraper):
 
     def __init__(self):
         super().__init__()
-        self._source=UrlSource.miniCircuit
+        self._source = UrlSource.miniCircuit
 
     def getItem(self, item: str) -> bool:
         """This method Checks if an item query as any results on the current page
@@ -248,14 +262,18 @@ class MiniCircuitScraper(BasicScraper):
         Returns:
             bool
         """
-        url = "https://www.minicircuits.com/WebStore/modelSearch.html?model={0}".format(item)
+        url = "https://www.minicircuits.com/WebStore/modelSearch.html?model={0}".format(
+            item)
         self._browser.get(url)
-        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/header/a/img')) == 0:
-            sleep(8)  # bypass access denial
+        # if permission denial screen retry after 8 secs
+        if self.isElementPresent('//*[@id="wrapper"]/header/a/img') is None:
+            sleep(8)
             self.getItem(item)
-        elif len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/label[1]')) > 0:
+        # if not found tag on page return false
+        elif self.isElementPresent('//*[@id="wrapper"]/section/div[1]/label[1]'):
             return False
-        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="wrapper"]/section/div[1]/div[1]')) > 0:
+        # if list of element found
+        if self.isElementPresent('//*[@id="wrapper"]/section/div[1]/div[1]'):
             search_result_elem = self._browser.find_element(by=By.XPATH,
                                                             value='//*[@id="wrapper"]/section/div[1]/div[1]/a')
             if(self._browser.current_url == url):
@@ -286,29 +304,46 @@ class MiniCircuitScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        for excel in (self.getExcels(input_dir)): #get excels
+        for excel in (self.getExcels(input_dir)):  # get excels
             print('\n\n')
-            result_df = pd.DataFrame(columns=_columns) # initialise result DataFrame
-            timestamp = datetime.now() # current time
+
+            # initialise result DataFrame
+            result_df = pd.DataFrame(columns=_columns)
+
+            # current time
+            timestamp = datetime.now()
+
+            # read csv into pandas
             raw_data = pd.read_excel(path.join(_dir, excel)) if excel.endswith(
-                '.xlsx') else pd.read_csv(path.join(_dir, excel)) 
+                '.xlsx') else pd.read_csv(path.join(_dir, excel))
+
+            # query Present columns
             present_columns = set(raw_data.columns).intersection(
                 ['Internal Part Number', 'Description', 'Manufacturer', 'Query', 'Qty'])
             print(raw_data)
+
+            # check if Query exists
             if ("Query" in present_columns):
+
+                # iterate over each row in the pandas DataFrame
                 for index, row in enumerate(raw_data.to_dict(orient='records')):
                     print("currently at index: {} \nData\t:{}".format(index, row))
+
+                    # get to Product/item Page if it exists
                     if self.getItem(row["Query"]):
                         row['Run Datetime'] = timestamp
                         row['Mfr'] = "Mini-Circuits"
-                        row["Mfr PN"] = self.isElementPresent('//*[@id="content_area_home"]/section/section[1]/label[1]')
-                        mfr_date_text = self.isElementPresent('//*[@id="model_price_section"]/div/p/span')
+                        row["Mfr PN"] = self.isElementPresent(
+                            '//*[@id="content_area_home"]/section/section[1]/label[1]')
+                        mfr_date_text = self.isElementPresent(
+                            '//*[@id="model_price_section"]/div/p/span')
                         if mfr_date_text:
                             row["On-Order Date"] = None if len(
                                 mfr_date_text.split(":")) < 2 else self.parseDate(mfr_date_text.split(":")[1].strip("*"), "%m/%d/%Y")
-                        stock = self.isElementPresent('//*[@id="model_price_section"]/div/div[2]/span')
+                        stock = self.isElementPresent(
+                            '//*[@id="model_price_section"]/div/div[2]/span')
                         if stock:
-                            stock=stock.split(" ")
+                            stock = stock.split(" ")
                             row["Stock"] = ">" + \
                                 stock[-1] if len(stock) > 1 else stock[-1]
                         if self.isElementPresent('//*[@id="model_price_section"]/table/thead/tr/th[1]'):
@@ -316,6 +351,7 @@ class MiniCircuitScraper(BasicScraper):
                         if not "Stock" in row:
                             row["Stock"] = "No catalog"
                     else:
+                        # if Item is not found
                         row['Run Datetime'] = timestamp
                         row['Mfr'] = "No Result"
                         row["Mfr PN"] = "No Result"
@@ -328,9 +364,22 @@ class MiniCircuitScraper(BasicScraper):
             result_df[_columns].to_excel(
                 path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
 
-if __name__ == "__main__":
-    # scraper = MasterElectronicsScraper()
-    # scraper.scrape(input_dir=_dir, output_dir=_output_dir)
 
-    scraper = MiniCircuitScraper()
-    scraper.scrape(input_dir=_dir, output_dir=_output_dir)
+def main():
+    # construct the argument parser and parse the arguments
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-s", "--site", required=True,
+        help="accepted value must be member of {}".format([i.value for i in UrlSource.__members__.values()]))
+    args = vars(ap.parse_args())
+    args["site"]=args["site"].lower()
+    assert  args["site"] in [i.value for i in UrlSource.__members__.values()], "accepted value must be member of {}".format([i.value for i in UrlSource.__members__.values()])
+
+    if args["site"]== 'masterelectronics.com':
+        scraper = MasterElectronicsScraper()
+        scraper.scrape(input_dir=_dir, output_dir=_output_dir)
+    elif args["site"]== 'mini-circuits.com':
+        scraper = MiniCircuitScraper()
+        scraper.scrape(input_dir=_dir, output_dir=_output_dir)
+
+if __name__ == "__main__":
+    main()
