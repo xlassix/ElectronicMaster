@@ -306,9 +306,9 @@ class MiniCircuitScraper(BasicScraper):
                         if mfr_date_text:
                             row["On-Order Date"] = None if len(
                                 mfr_date_text.split(":")) < 2 else self.parseDate(mfr_date_text.split(":")[1].strip("*"), "%m/%d/%Y")
-                        if len(self._browser.find_elements(by=By.XPATH, value='//*[@id="model_price_section"]/div/div[2]/span')) != 0:
-                            stock = self.getTextByXPath(
-                                '//*[@id="model_price_section"]/div/div[2]/span').split(" ")
+                        stock = self.isElementPresent('//*[@id="model_price_section"]/div/div[2]/span')
+                        if stock:
+                            stock=stock.split(" ")
                             row["Stock"] = ">" + \
                                 stock[-1] if len(stock) > 1 else stock[-1]
                         if self.isElementPresent('//*[@id="model_price_section"]/table/thead/tr/th[1]'):
