@@ -9,6 +9,7 @@ from selenium.webdriver.common.by import By
 from datetime import date, datetime
 import enum
 import argparse
+from urllib.parse import quote 
 
 
 _dir = "input"
@@ -105,6 +106,7 @@ class BasicScraper():
         Returns:
             Option<Str>: String or None
         """
+        sleep(1.5)
         data = self._browser.find_elements(by=By.XPATH, value=xpath)
         if len(data) != 0:
             return data[order].text
@@ -140,7 +142,7 @@ class MasterElectronicsScraper(BasicScraper):
             bool
         """
         url = "https://www.masterelectronics.com/en/keywordsearch?text={0}".format(
-            item)
+            quote(item))
         self._browser.get(url)
         if(self._browser.current_url == url or "https://www.masterelectronics.com/en/productsearch/" in self._browser.current_url):
             self._browser.find_element(by=By.XPATH,
@@ -194,7 +196,7 @@ class MasterElectronicsScraper(BasicScraper):
             output_dir (str): Output Directory
         """
         for excel in (self.getExcels(input_dir)):  # get excels
-            print('\n\n')
+            # print('\n\n')
 
             # initialise result DataFrame
             result_df = pd.DataFrame(columns=_columns)
@@ -216,7 +218,7 @@ class MasterElectronicsScraper(BasicScraper):
 
                 # iterate over each row in the pandas DataFrame
                 for index, row in enumerate(raw_data.to_dict(orient='records')):
-                    print("currently at index: {} \nData\t:{}".format(index, row))
+                    print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(index+1,row["Manufacturer"], row["Query"] ))
 
                     # get to Product/item Page if it exists
                     if self.getItem(row["Query"]):
@@ -263,7 +265,7 @@ class MiniCircuitScraper(BasicScraper):
             bool
         """
         url = "https://www.minicircuits.com/WebStore/modelSearch.html?model={0}".format(
-            item)
+            quote(item))
         self._browser.get(url)
         # if permission denial screen retry after 8 secs
         if self.isElementPresent('//*[@id="wrapper"]/header/a/img') is None:
@@ -305,7 +307,7 @@ class MiniCircuitScraper(BasicScraper):
             output_dir (str): Output Directory
         """
         for excel in (self.getExcels(input_dir)):  # get excels
-            print('\n\n')
+            # print('\n\n')
 
             # initialise result DataFrame
             result_df = pd.DataFrame(columns=_columns)
@@ -327,7 +329,7 @@ class MiniCircuitScraper(BasicScraper):
 
                 # iterate over each row in the pandas DataFrame
                 for index, row in enumerate(raw_data.to_dict(orient='records')):
-                    print("currently at index: {} \nData\t:{}".format(index, row))
+                    print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(index+1,row["Manufacturer"], row["Query"] ))
 
                     # get to Product/item Page if it exists
                     if self.getItem(row["Query"]):
@@ -364,6 +366,12 @@ class MiniCircuitScraper(BasicScraper):
             result_df[_columns].to_excel(
                 path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
 
+# A dict of scrapers and their corresponding classes
+SCRAPER_DICT = {
+    'masterelectronics.com': MasterElectronicsScraper,
+    'mini-circuits.com': MiniCircuitScraper
+}
+# A dict of scrapers and their corresponding classes
 
 def main():
     # construct the argument parser and parse the arguments
@@ -372,14 +380,12 @@ def main():
         help="accepted value must be member of {}".format([i.value for i in UrlSource.__members__.values()]))
     args = vars(ap.parse_args())
     args["site"]=args["site"].lower()
-    assert  args["site"] in [i.value for i in UrlSource.__members__.values()], "accepted value must be member of {}".format([i.value for i in UrlSource.__members__.values()])
+    assert  args["site"] in [i.value for i in UrlSource.__members__.values()], "site parameter must be of {}".format([i.value for i in UrlSource.__members__.values()])
+    # construct the argument parser and parse the arguments
 
-    if args["site"]== 'masterelectronics.com':
-        scraper = MasterElectronicsScraper()
-        scraper.scrape(input_dir=_dir, output_dir=_output_dir)
-    elif args["site"]== 'mini-circuits.com':
-        scraper = MiniCircuitScraper()
-        scraper.scrape(input_dir=_dir, output_dir=_output_dir)
+    site = args['site']
+    scraper = SCRAPER_DICT[site]()
+    scraper.scrape(input_dir=_dir, output_dir=_output_dir)
 
 if __name__ == "__main__":
     main()
