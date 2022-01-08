@@ -8,12 +8,19 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+from webdriver_manager.utils import ChromeType
 from datetime import date, datetime
 import enum
 import argparse
 from urllib.parse import quote
 from io import StringIO
 import re
+
+
+
+options = webdriver.ChromeOptions()
+options.binary_location = "/usr/lib/brave/brave"
+chrome_driver_binary = "./chromedriver"
 
 _dir = "input"
 _output_dir = "output"
@@ -31,12 +38,13 @@ class UrlSource(enum.Enum):
     masterElectronics = 'masterelectronics.com'
     miniCircuit = 'mini-circuits.com'
     digiKey = "digikey.com"
-
+    mouser = "mouser.com"
 
 class BasicScraper():
     def __init__(self):
-        self._browser = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()))
+        self._browser =   webdriver.Chrome(chrome_driver_binary, chrome_options=options)
+        # webdriver.Chrome(
+        #     service=Service(ChromeDriverManager(version="94.0.4606.113",chrome_type=ChromeType.CHROMIUM,cache_valid_range=7).install()),chrome_options=options)
         self._timer = 1.5
 
     def getTextById(self, _id: str) -> str:
@@ -457,6 +465,42 @@ class DigiKeyScraper(BasicScraper):
         """
         return [{"Price Break Qty": self.parseFloat(item[0]), "Price Break Price":self.parseFloat(item[1])} for item in [elem.split("$") for elem in data.replace(",", "").split("\n")]]
 
+    def miniScraper(self,row:dict,pricing_df:pd.DataFrame)->dict:
+        #scrape manufactures Info if it exist
+        if mfr := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[2]/td[2]'):
+            row["Mfr"] = mfr
+        if mfr_pn := self.isElementPresent('//*[@data-testid="mfr-number"]'):
+            row["Mfr PN"] = mfr_pn
+        
+        # Price Table scraping
+        temp_pricing_df = pd.DataFrame(columns=_columns_pricing)
+        if priceListData := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[1]/table/tbody'):
+            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData),ignore_index=True, sort=False)
+        if priceListData_2 := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[2]/table/tbody'):
+            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData_2),ignore_index=True, sort=False) 
+        if priceListData := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div[1]/div/div[4]/span[1]/table/tbody'):
+            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData),ignore_index=True, sort=False)
+        if priceListData_2 := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div[1]/div/div[4]/span[2]/table/tbody'):
+            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData_2),ignore_index=True, sort=False)
+        temp_pricing_df["Query"]=row["Query"]
+        temp_pricing_df["source"]=self._source.name
+        temp_pricing_df["MPN"]=row["Mfr PN"]
+        pricing_df=pricing_df.append(temp_pricing_df)
+        if len(temp_pricing_df.index)!=0:
+            row["Min Order"]=temp_pricing_df["Price Break Qty"].min()
+        del temp_pricing_df # selete Datafrane after us
+
+        if stock_text := self.isElementPresent('//*[@data-testid="price-and-procure-title"]'):
+            row["Stock"] = self.extractDigit(stock_text)
+        if leadTime := self.isElementPresent(('//*[@id="stdLeadTime"]')):
+            row["Lead-Time"] = leadTime.strip(" Weeks")
+        if factoryStock := self.isElementPresent('//*[@data-testid="qty-available-messages"]'):
+            row["Mfr Stock"]= self.extractDigit(factoryStock[factoryStock.find("Factory Stock:"):].replace(",", ""))
+        if orderDate:= self.isElementPresent('//*[@class="dk-table"]/tbody'):
+            print(orderDate)
+        return row
+
+
     def scrape(self, input_dir: str, output_dir: str):
         """This method reads all the excels in Xlsx and csv format from the specified input directory and writes the scraped output 
         into the corresponding output directory
@@ -493,40 +537,7 @@ class DigiKeyScraper(BasicScraper):
                     # get to Product/item Page if it exists
                     if self.getItem(row["Query"]):
                         row['Run Datetime'] = timestamp
-                        
-                        #scrape manufactures Info if it exist
-                        if mfr := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[2]/td[2]'):
-                            row["Mfr"] = mfr
-                        if mfr_pn := self.isElementPresent('//*[@data-testid="mfr-number"]'):
-                            row["Mfr PN"] = mfr_pn
-                        
-                        # Price Table scraping
-                        temp_pricing_df = pd.DataFrame(columns=_columns_pricing)
-                        if priceListData := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[1]/table/tbody'):
-                            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData),ignore_index=True, sort=False)
-                        if priceListData_2 := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[2]/table/tbody'):
-                            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData_2),ignore_index=True, sort=False) 
-                        if priceListData := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div[1]/div/div[4]/span[1]/table/tbody'):
-                            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData),ignore_index=True, sort=False)
-                        if priceListData_2 := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div[1]/div/div[4]/span[2]/table/tbody'):
-                            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData_2),ignore_index=True, sort=False)
-                        temp_pricing_df["Query"]=row["Query"]
-                        temp_pricing_df["source"]=self._source.name
-                        temp_pricing_df["MPN"]=row["Mfr PN"]
-                        pricing_df=pricing_df.append(temp_pricing_df)
-                        if len(temp_pricing_df.index)!=0:
-                            row["Min Order"]=temp_pricing_df["Price Break Qty"].min()
-                        del temp_pricing_df # selete Datafrane after us
-
-                        if stock_text := self.isElementPresent('//*[@data-testid="price-and-procure-title"]'):
-                            row["Stock"] = self.extractDigit(stock_text)
-                        if leadTime := self.isElementPresent(('//*[@id="stdLeadTime"]')):
-                            row["Lead-Time"] = leadTime.strip(" Weeks")
-                        if factoryStock := self.isElementPresent('//*[@data-testid="qty-available-messages"]'):
-                            row["Mfr Stock"]= self.extractDigit(factoryStock[factoryStock.find("Factory Stock:"):].replace(",", ""))
-                        if orderDate:= self.isElementPresent('//*[@class="dk-table"]/tbody'):
-                            print(orderDate)
-                            break
+                        row= self.miniScraper(row,pricing_df)
                     else:
                         # if Item is not found
                         row['Run Datetime'] = timestamp
@@ -541,11 +552,155 @@ class DigiKeyScraper(BasicScraper):
             filename =    path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx"))
             self.writeToFile( filename,parts=result_df,pricing=pricing_df)
 
+class MouserScraper(BasicScraper):
+
+    def __init__(self):
+        super().__init__()
+        self._source = UrlSource.mouser
+        self._timer = 0.5
+
+    def getItem(self, item: str) -> bool:
+        """This method Checks if an item query as any results on the current page
+            it returns true to indicate if on the right page and false if the search item returns no results
+
+        Args:
+            item (str): Query
+
+        Returns:
+            bool
+        """
+        url = "https://www.mouser.com/"
+        self._browser.get(url)
+        sleep(5)
+        self._browser.find_element(by=By.XPATH,value='//input[@placeholder="Part # / Keyword"]').send_keys(item)
+        sleep(10)
+        self._browser.find_element(by=By.XPATH,value='//*[@id="hdrSrch"]').click()
+        sleep(5)
+        if(self._browser.current_url == url ):
+            self.scrollDown()
+            sleep(20)
+        elif "mouser.com/ProductDetail/" in self._browser.current_url: 
+            return True
+        else:
+            sleep(10)
+        return False
+
+    def getPriceList(self, data) -> list:
+        """This method get the Price list(dict) For UrlSource on a product page
+
+        Args:
+            browser (webdriver): Selenium.WebDriver
+
+        Returns:
+            dict
+        """
+        return [{"Price Break Qty": self.parseFloat(item[0]), "Price Break Price":self.parseFloat(item[1])} for item in [elem.split("$") for elem in data]]
+
+    def miniScraper(self,row:dict,pricing_df:pd.DataFrame)->dict:
+        #scrape manufactures Info if it exist
+        if mfr := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[2]/td[2]'):
+            row["Mfr"] = mfr
+        if mfr_pn := self.isElementPresent('//*[@data-testid="mfr-number"]'):
+            row["Mfr PN"] = mfr_pn
+        
+        # Price Table scraping
+        temp_pricing_df = pd.DataFrame(columns=_columns_pricing)
+        if priceListData := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[1]/table/tbody'):
+            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData),ignore_index=True, sort=False)
+        if priceListData_2 := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[2]/table/tbody'):
+            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData_2),ignore_index=True, sort=False) 
+        if priceListData := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div[1]/div/div[4]/span[1]/table/tbody'):
+            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData),ignore_index=True, sort=False)
+        if priceListData_2 := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div[1]/div/div[4]/span[2]/table/tbody'):
+            temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData_2),ignore_index=True, sort=False)
+        temp_pricing_df["Query"]=row["Query"]
+        temp_pricing_df["source"]=self._source.name
+        temp_pricing_df["MPN"]=row["Mfr PN"]
+        pricing_df=pricing_df.append(temp_pricing_df)
+        if len(temp_pricing_df.index)!=0:
+            row["Min Order"]=temp_pricing_df["Price Break Qty"].min()
+        del temp_pricing_df # selete Datafrane after us
+
+        if stock_text := self.isElementPresent('//*[@data-testid="price-and-procure-title"]'):
+            row["Stock"] = self.extractDigit(stock_text)
+        if leadTime := self.isElementPresent(('//*[@id="stdLeadTime"]')):
+            row["Lead-Time"] = leadTime.strip(" Weeks")
+        if factoryStock := self.isElementPresent('//*[@data-testid="qty-available-messages"]'):
+            row["Mfr Stock"]= self.extractDigit(factoryStock[factoryStock.find("Factory Stock:"):].replace(",", ""))
+        if orderDate:= self.isElementPresent('//*[@class="dk-table"]/tbody'):
+            print(orderDate)
+        return row
+
+
+    def scrape(self, input_dir: str, output_dir: str):
+        """This method reads all the excels in Xlsx and csv format from the specified input directory and writes the scraped output 
+        into the corresponding output directory
+
+        Args:
+            input_dir (str): Input directory
+            output_dir (str): Output Directory
+        """
+
+        for excel in (self.getExcels(input_dir)):  # get excels
+            # initialise result DataFrames
+            result_df = pd.DataFrame(columns=_columns_part)
+            pricing_df = pd.DataFrame(columns=_columns_pricing)
+
+            # current time
+            timestamp = datetime.now()
+
+            # read csv into pandas
+            raw_data = pd.read_excel(path.join(_dir, excel)) if excel.endswith(
+                '.xlsx') else pd.read_csv(path.join(_dir, excel))
+
+            # query Present columns
+            present_columns = set(raw_data.columns).intersection(
+                ['Internal Part Number', 'Description', 'Manufacturer', 'Query', 'Qty'])
+            print(raw_data)
+
+            # check if Query exists
+            if ("Query" in present_columns):
+
+                # iterate over each row in the pandas DataFrame
+                for index, row in enumerate(raw_data.to_dict(orient='records')[0:]):
+                    print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
+                        index+1, row["Manufacturer"], row["Query"]))
+                    # get to Product/item Page if it exists
+                    if self.getItem(row["Query"]):
+                        row['Run Datetime'] = timestamp
+                        print(self.getPriceList(list(filter(lambda x: "$" in x,  self.getTextByXPath('//*[@class="pricing-table"]').replace(",", "").split("\n")))))
+                        if mfr_part:= self.isElementPresent('//*[@id="spnManufacturerPartNumber"]'):
+                            print("mfr PN",mfr_part)
+                        if mfr:= self.isElementPresent('//*[@id="lnkManufacturerName"]'):
+                            print("mfr",mfr)
+                        if order := self.isElementPresent('//*[id="content-onOrderShipments"]'):
+                            print("order\t",order)
+                        if stock :=self.isElementPresent('//*[@class="panel-title pdp-pricing-header"]'):
+                            print("stock\t:",self.extractDigit(stock.replace(",","")))
+                        if leadTime :=self.isElementPresent('//*[@aria-labelledby="factoryLeadTimeLabelHeader"]'):
+                            print("leadTime\t:",self.extractDigit(leadTime))                            
+                    else:
+                        # if Item is not found
+                        row['Run Datetime'] = timestamp
+                        row['Mfr'] = "No Result"
+                        row["Mfr PN"] = "* NOT FOUND *"
+                    #row["Source"] = self._source.value
+                    row["URL"] = self._browser.current_url
+                    result_df = result_df.append(
+                        row, ignore_index=True, sort=False)
+            else:
+                print("could not find `Query` in {}".format(excel))
+            filename =    path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx"))
+            #self.writeToFile( filename,parts=result_df,pricing=pricing_df)
+        break
+
+
 # A dict of scrapers and their corresponding classes
 SCRAPER_DICT = {
     'masterelectronics.com': MasterElectronicsScraper,
     'mini-circuits.com': MiniCircuitScraper,
-    "digikey.com": DigiKeyScraper
+    "digikey.com": DigiKeyScraper,
+    "mouser.com":MouserScraper
 }
 # A dict of scrapers and their corresponding classes
 
