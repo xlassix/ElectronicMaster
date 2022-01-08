@@ -1,11 +1,5 @@
-<<<<<<< HEAD
-driver
-__pycache__
-ElectronicMaster.zip
-=======
 __pycache__
 env
 input
 output
->>>>>>> df9e1d4 (data)
 Pipfile.lock

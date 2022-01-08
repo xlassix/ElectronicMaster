@@ -13,6 +13,7 @@ import enum
 import argparse
 from urllib.parse import quote
 from io import StringIO
+import re
 
 _dir = "input"
 _output_dir = "output"
@@ -106,6 +107,10 @@ class BasicScraper():
             [str]: list of excel(.xlsx) in path
         """
         return (list(filter(lambda elem: elem.endswith(".csv") or elem.endswith(".xlsx"), listdir(path))))
+
+    def extractDigit(self,text:str):
+        r=re.search(r'\d+', text.replace(",",""))
+        return (self.parseFloat(r.group(0)) if r else 0)
 
     def isElementPresent(self, xpath: str, order=0):
         """This method looks up an xpath if it exists then the first element is return 
@@ -401,7 +406,7 @@ class DigiKeyScraper(BasicScraper):
     def __init__(self):
         super().__init__()
         self._source = UrlSource.digiKey
-        self._timer = 0.2
+        self._timer = 0.5
 
     def getItem(self, item: str) -> bool:
         """This method Checks if an item query as any results on the current page
@@ -460,13 +465,9 @@ class DigiKeyScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        # self._browser.maximize_window()
-        for excel in (self.getExcels(input_dir)):  # get excels
-            # print('\n\n')
 
-            self._browser.execute_script("document.body.style.zoom='60%'")
-            self._browser.find_element_by_tag_name("body").send_keys(Keys.CONTROL, Keys.SUBTRACT)
-            # initialise result DataFrame
+        for excel in (self.getExcels(input_dir)):  # get excels
+            # initialise result DataFrames
             result_df = pd.DataFrame(columns=_columns_part)
             pricing_df = pd.DataFrame(columns=_columns_pricing)
 
@@ -486,18 +487,20 @@ class DigiKeyScraper(BasicScraper):
             if ("Query" in present_columns):
 
                 # iterate over each row in the pandas DataFrame
-                for index, row in enumerate(raw_data.to_dict(orient='records')[1:]):
+                for index, row in enumerate(raw_data.to_dict(orient='records')[4:]):
                     print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
                         index+1, row["Manufacturer"], row["Query"]))
                     # get to Product/item Page if it exists
                     if self.getItem(row["Query"]):
                         row['Run Datetime'] = timestamp
-                        print(self._browser.current_url)
+                        
+                        #scrape manufactures Info if it exist
                         if mfr := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[2]/td[2]'):
                             row["Mfr"] = mfr
                         if mfr_pn := self.isElementPresent('//*[@data-testid="mfr-number"]'):
                             row["Mfr PN"] = mfr_pn
-
+                        
+                        # Price Table scraping
                         temp_pricing_df = pd.DataFrame(columns=_columns_pricing)
                         if priceListData := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[1]/table/tbody'):
                             temp_pricing_df=temp_pricing_df.append(self.getPriceList(priceListData),ignore_index=True, sort=False)
@@ -511,17 +514,19 @@ class DigiKeyScraper(BasicScraper):
                         temp_pricing_df["source"]=self._source.name
                         temp_pricing_df["MPN"]=row["Mfr PN"]
                         pricing_df=pricing_df.append(temp_pricing_df)
-                        del temp_pricing_df
-                        print(pricing_df)
+                        if len(temp_pricing_df.index)!=0:
+                            row["Min Order"]=temp_pricing_df["Price Break Qty"].min()
+                        del temp_pricing_df # selete Datafrane after us
 
-                        if stock_text := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div/div/div[1]'):
-                            row["Stock"] =(stock_text.strip(
-                                'In Stock').strip(' To Order'))
+                        if stock_text := self.isElementPresent('//*[@data-testid="price-and-procure-title"]'):
+                            row["Stock"] = self.extractDigit(stock_text)
                         if leadTime := self.isElementPresent(('//*[@id="stdLeadTime"]')):
                             row["Lead-Time"] = leadTime.strip(" Weeks")
-                        if factoryStock := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div[1]/div/div[2]/div/div[2]/span[1]'):
-                            row["Mfr Stock"]= factoryStock.replace(
-                                ",", "").strip("Factory Stock:")
+                        if factoryStock := self.isElementPresent('//*[@data-testid="qty-available-messages"]'):
+                            row["Mfr Stock"]= self.extractDigit(factoryStock[factoryStock.find("Factory Stock:"):].replace(",", ""))
+                        if orderDate:= self.isElementPresent('//*[@class="dk-table"]/tbody'):
+                            print(orderDate)
+                            break
                     else:
                         # if Item is not found
                         row['Run Datetime'] = timestamp
