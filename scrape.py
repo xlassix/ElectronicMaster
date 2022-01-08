@@ -401,7 +401,7 @@ class DigiKeyScraper(BasicScraper):
     def __init__(self):
         super().__init__()
         self._source = UrlSource.digiKey
-        self._timer = 1
+        self._timer = 0.2
 
     def getItem(self, item: str) -> bool:
         """This method Checks if an item query as any results on the current page
@@ -433,7 +433,12 @@ class DigiKeyScraper(BasicScraper):
                 sleep(0.5)
                 print("selected from table")
                 return True
-        print("FOund")
+        elif "https://www.digikey.com/en/products/category/" in self._browser.current_url:
+            self.scrollIntoView('//*[@id="__next"]/main/div/div/div/div[5]')
+            sleep(self._timer)
+            self._browser.find_element(by=By.XPATH,value='//a[starts-with(@data-testid,"product-card")]').click()
+            sleep(2)
+            return True
         return True
 
     def getPriceList(self, data) -> list:
@@ -455,10 +460,12 @@ class DigiKeyScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        self._browser.maximize_window()
+        # self._browser.maximize_window()
         for excel in (self.getExcels(input_dir)):  # get excels
             # print('\n\n')
 
+            self._browser.execute_script("document.body.style.zoom='60%'")
+            self._browser.find_element_by_tag_name("body").send_keys(Keys.CONTROL, Keys.SUBTRACT)
             # initialise result DataFrame
             result_df = pd.DataFrame(columns=_columns_part)
             pricing_df = pd.DataFrame(columns=_columns_pricing)
@@ -479,7 +486,7 @@ class DigiKeyScraper(BasicScraper):
             if ("Query" in present_columns):
 
                 # iterate over each row in the pandas DataFrame
-                for index, row in enumerate(raw_data.to_dict(orient='records')[2:]):
+                for index, row in enumerate(raw_data.to_dict(orient='records')[1:]):
                     print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
                         index+1, row["Manufacturer"], row["Query"]))
                     # get to Product/item Page if it exists
@@ -488,10 +495,8 @@ class DigiKeyScraper(BasicScraper):
                         print(self._browser.current_url)
                         if mfr := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[2]/td[2]'):
                             row["Mfr"] = mfr
-                        if mfr_pn := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[3]/td[2]'):
+                        if mfr_pn := self.isElementPresent('//*[@data-testid="mfr-number"]'):
                             row["Mfr PN"] = mfr_pn
-
-
 
                         temp_pricing_df = pd.DataFrame(columns=_columns_pricing)
                         if priceListData := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[1]/table/tbody'):
@@ -528,7 +533,7 @@ class DigiKeyScraper(BasicScraper):
                         row, ignore_index=True, sort=False)
             else:
                 print("could not find `Query` in {}".format(excel))
-            filename =str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")
+            filename =    path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx"))
             self.writeToFile( filename,parts=result_df,pricing=pricing_df)
 
 # A dict of scrapers and their corresponding classes
