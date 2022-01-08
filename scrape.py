@@ -10,6 +10,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.utils import ChromeType
 from datetime import date, datetime
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import enum
 import argparse
 from urllib.parse import quote
@@ -575,11 +577,15 @@ class MouserScraper(BasicScraper):
         self._browser.find_element(by=By.XPATH,value='//input[@placeholder="Part # / Keyword"]').send_keys(item)
         sleep(10)
         self._browser.find_element(by=By.XPATH,value='//*[@id="hdrSrch"]').click()
-        sleep(5)
-        if(self._browser.current_url == url ):
+        sleep(9)
+        if("/c/?q=" in self._browser.current_url):
             self.scrollDown()
-            sleep(20)
-        elif "mouser.com/ProductDetail/" in self._browser.current_url: 
+            sleep(10)
+            if self.isElementPresent('//*[@id="lblreccount"]'):
+                self.scrollIntoView('//*[@id="lnkProductImage_2"]')
+                self._browser.find_element(By.XPATH,'//*[@id="productImgDiv_2"]').click()
+                sleep(10)
+        if "mouser.com/ProductDetail/" in self._browser.current_url: 
             return True
         else:
             sleep(10)
@@ -657,28 +663,38 @@ class MouserScraper(BasicScraper):
             present_columns = set(raw_data.columns).intersection(
                 ['Internal Part Number', 'Description', 'Manufacturer', 'Query', 'Qty'])
             print(raw_data)
+            self._browser.maximize_window()
 
             # check if Query exists
             if ("Query" in present_columns):
 
                 # iterate over each row in the pandas DataFrame
-                for index, row in enumerate(raw_data.to_dict(orient='records')[0:]):
+                for index, row in enumerate(raw_data.to_dict(orient='records')[2:]):
                     print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
                         index+1, row["Manufacturer"], row["Query"]))
                     # get to Product/item Page if it exists
                     if self.getItem(row["Query"]):
                         row['Run Datetime'] = timestamp
-                        print(self.getPriceList(list(filter(lambda x: "$" in x,  self.getTextByXPath('//*[@class="pricing-table"]').replace(",", "").split("\n")))))
+                        print(self._browser.current_url)
                         if mfr_part:= self.isElementPresent('//*[@id="spnManufacturerPartNumber"]'):
-                            print("mfr PN",mfr_part)
+                            row["Mfr PN"] = mfr_pn
                         if mfr:= self.isElementPresent('//*[@id="lnkManufacturerName"]'):
-                            print("mfr",mfr)
+                            row["Mfr"] = mfr
                         if order := self.isElementPresent('//*[id="content-onOrderShipments"]'):
                             print("order\t",order)
                         if stock :=self.isElementPresent('//*[@class="panel-title pdp-pricing-header"]'):
-                            print("stock\t:",self.extractDigit(stock.replace(",","")))
+                            row["Stock"] = self.extractDigit(stock.replace(",",""))
                         if leadTime :=self.isElementPresent('//*[@aria-labelledby="factoryLeadTimeLabelHeader"]'):
-                            print("leadTime\t:",self.extractDigit(leadTime))                            
+                            row["Lead-Time"] = self.extractDigit(leadTime)
+                        temp_pricing_df=temp_pricing_df.append(self.getPriceList(list(filter(lambda x: "$" in x,  self.getTextByXPath('//*[@class="pricing-table"]').replace(",", "").split("\n")))))
+                        temp_pricing_df["Query"]=row["Query"]
+                        temp_pricing_df["source"]=self._source.name
+                        temp_pricing_df["MPN"]=row["Mfr PN"]
+                        pricing_df=pricing_df.append(temp_pricing_df)
+                        if len(temp_pricing_df.index)!=0:
+                            row["Min Order"]=temp_pricing_df["Price Break Qty"].min()
+                        del temp_pricing_df # selete Datafrane after us                        
+                        
                     else:
                         # if Item is not found
                         row['Run Datetime'] = timestamp
@@ -691,8 +707,7 @@ class MouserScraper(BasicScraper):
             else:
                 print("could not find `Query` in {}".format(excel))
             filename =    path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx"))
-            #self.writeToFile( filename,parts=result_df,pricing=pricing_df)
-        break
+            self.writeToFile( filename,parts=result_df,pricing=pricing_df)
 
 
 # A dict of scrapers and their corresponding classes
