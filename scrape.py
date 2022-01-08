@@ -12,7 +12,7 @@ from datetime import date, datetime
 import enum
 import argparse
 from urllib.parse import quote 
-
+from io import StringIO
 
 _dir = "input"
 _output_dir = "output"
@@ -20,7 +20,9 @@ makedirs(_output_dir, exist_ok=True)
 _columns = ['Internal Part Number', 'Description', 'Manufacturer', 'Query',
             'Qty', 'Run Datetime', "Stock", "Mfr PN", "Mfr", "Mfr Stock", "Mfr Stock Date", 'On-Order', 'On-Order Date', "Lead-Time", "Min Order",
             "PB1 Qty", "PB2 Qty", "PB3 Qty", "PB4 Qty", "PB5 Qty", "PB6 Qty", "PB7 Qty", "PB8 Qty",	"PB9 Qty", "PB10 Qty", "PB1 $",	"PB2 $", "PB3 $",	"PB4 $",	"PB5 $",	"PB6 $",	"PB7 $",	"PB8 $",	"PB9 $", "PB10 $",	"URL"]
-
+_columns_pricing =["Query",	"MPN",	"Price Break Qty",	"Price Break Price",	"Source"]
+_columns_part = ['Internal Part Number', 'Description', 'Manufacturer', 'Query',
+            'Qty', 'Run Datetime', "Stock", "Mfr PN", "Mfr", "Mfr Stock", "Mfr Stock Date", "Lead-Time", "Min Order",	"URL"]
 
 class UrlSource(enum.Enum):
     masterElectronics = 'masterelectronics.com'
@@ -32,6 +34,7 @@ class BasicScraper():
     def __init__(self):
         self._browser = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()))
+        self._timer=1.5
 
     def getTextById(self, _id: str) -> str:
         """This Function Gets Text from the WebDriver Instance that matches the HTML AttributeId
@@ -114,7 +117,7 @@ class BasicScraper():
         Returns:
             Option<Str>: String or None
         """
-        sleep(1.5)
+        sleep(self._timer)
         data = self._browser.find_elements(by=By.XPATH, value=xpath)
         if len(data) != 0:
             return data[order].text
@@ -383,6 +386,7 @@ class DigiKeyScraper(BasicScraper):
     def __init__(self):
         super().__init__()
         self._source = UrlSource.digiKey
+        self._timer=0.2
 
     def getItem(self, item: str) -> bool:
         """This method Checks if an item query as any results on the current page
@@ -399,22 +403,21 @@ class DigiKeyScraper(BasicScraper):
         self._browser.find_element(by=By.XPATH,value='//*[@id="header"]/div[1]/div[1]/div/div[2]/div[2]/input').send_keys(item)
         self._browser.find_element(by=By.XPATH,value='//*[@id="header-search-button"]').click()
         if self.isElementPresent('//*[@id="__next"]/main/div/div/div/div[2]/div[1]/div[1]/div/span'):
-            print("Not found")
             return False
         if "https://www.digikey.com/en/products/detail" in self._browser.current_url:
             return True
         elif "https://www.digikey.com/en/products/filter/" in self._browser.current_url:
             if self.isElementPresent('//*[@id="data-table-0"]/tbody/tr[1]/td[2]/div/div[3]/div[1]/a'):
-                self.scrollDown()
+                self.scrollIntoView('//*[@id="__next"]/main/section/div/div[2]/div/div[3]/div/div[1]/div/div[1]/div/div[1]')
                 sleep(1)
                 self._browser.find_element(by=By.XPATH,value='//*[@id="data-table-0"]/tbody/tr[1]/td[2]/div/div[3]/div[1]/a').click()
-                sleep(1.5)
+                sleep(0.5)
                 print ("selected from table")
                 return True
         print("FOund")
         return True
 
-    def getPriceList(self) -> dict:
+    def getPriceList(self,data) -> dict:
         """This method get the Price list(dict) For UrlSource on a product page
 
         Args:
@@ -423,12 +426,7 @@ class DigiKeyScraper(BasicScraper):
         Returns:
             dict
         """
-        data = list(map(lambda x: list(map(lambda y: y.split(" ")[0], x.split(
-            " $"))), self.getTextByXPath('//*[@id="model_price_section"]/table').split("\n")[1:]))
-        results = []
-        list(results.extend([("PB{} Qty".format(index+1), self.parseFloat(i[0])),
-                            ("PB{} $".format(index+1), self.parseFloat(i[1]))]) for index, i in enumerate(data[:20]))
-        return dict(results)
+        return [{"unit":self.parseFloat(item[0]),"price":self.parseFloat(item[1])} for item in [ elem.split("$") for elem in data.replace(",","").split("\n") ]]
 
     def scrape(self, input_dir: str, output_dir: str):
         """This method reads all the excels in Xlsx and csv format from the specified input directory and writes the scraped output 
@@ -438,6 +436,7 @@ class DigiKeyScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
+        self._browser.maximize_window()
         for excel in (self.getExcels(input_dir)):  # get excels
             # print('\n\n')
 
@@ -465,40 +464,35 @@ class DigiKeyScraper(BasicScraper):
 
                     # get to Product/item Page if it exists
                     if self.getItem(row["Query"]):
-                        sleep()
-                        print(self.scrollIntoView ('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[1]/table/tbody'))
-                        sleep(10)
+                        print(self._browser.current_url)
+                        if priceListData:=self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[1]/table/tbody'):
+                            print(self.getPriceList(priceListData))
+                        if priceListData_2:=self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[3]/div/div[4]/span[2]/table/tbody'):
+                            print(self.getPriceList(priceListData_2))
                         row['Run Datetime'] = timestamp
-                        row['Mfr'] = "Mini-Circuits"
-                        row["Mfr PN"] = self.isElementPresent(
-                            '//*[@id="content_area_home"]/section/section[1]/label[1]')
-                        mfr_date_text = self.isElementPresent(
-                            '//*[@id="model_price_section"]/div/p/span')
-                        if mfr_date_text:
-                            row["On-Order Date"] = None if len(
-                                mfr_date_text.split(":")) < 2 else self.parseDate(mfr_date_text.split(":")[1].strip("*"), "%m/%d/%Y")
-                        stock = self.isElementPresent(
-                            '//*[@id="model_price_section"]/div/div[2]/span')
-                        if stock:
-                            stock = stock.split(" ")
-                            row["Stock"] = ">" + \
-                                stock[-1] if len(stock) > 1 else stock[-1]
-                        if self.isElementPresent('//*[@id="model_price_section"]/table/thead/tr/th[1]'):
-                            row.update(self.getPriceList())
+                        if mfr := self.getTextByXPath('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[2]/td[2]'):
+                            row["Mfr PN"] =mfr
+                        if mfr_pn := self.getTextByXPath('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[3]/td[2]'):
+                            row["Mfr PN"]=mfr_pn
+                        if stock_text:=self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div/div/div[1]') :
+                            print(stock_text.strip('In Stock').strip(' To Order'))
+                        if leadTime := self.isElementPresent(('//*[@id="stdLeadTime"]')):
+                            row["lead"]=leadTime.strip(" Weeks")
+                        if factoryStock:= self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div[2]/div[1]/div/div[2]/div/div[2]/span[1]'):
+                            print("\n\n",factoryStock.replace(",","").strip("Factory Stock:"))
                         if not "Stock" in row:
                             row["Stock"] = "No catalog"
                     else:
                         # if Item is not found
                         row['Run Datetime'] = timestamp
                         row['Mfr'] = "No Result"
-                        row["Mfr PN"] = "No Result"
+                        row["Mfr PN"] = "* NOT FOUND *"
                     row["Source"] = self._source.value
                     row["URL"] = self._browser.current_url
                     result_df = result_df.append(
                         row, ignore_index=True, sort=False)
             else:
                 print("could not find `Query` in {}".format(excel))
-            result_df[_columns].to_excel()
 
 # A dict of scrapers and their corresponding classes
 SCRAPER_DICT = {
