@@ -10,19 +10,30 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.utils import ChromeType
 from datetime import date, datetime
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import enum
 import argparse
 from urllib.parse import quote
 from io import StringIO
 import re
-
-
+import platform 
+from sys import exit
+plt = platform.system()
 
 options = webdriver.ChromeOptions()
-options.binary_location = "/usr/lib/brave/brave"
-chrome_driver_binary = "./chromedriver"
+
+if plt == "Windows":
+    options.binary_location = "C:/Program Files (x86)/BraveSoftware/Brave-Browser/Application/brave.exe"
+    print("Your system is Windows")
+elif plt == "Linux":
+    options.binary_location = "/usr/lib/brave-browser/brave"
+    print("Your system is Linux")
+elif plt == "Darwin":
+    options.binary_location = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    print("Your system is MacOS")
+else:
+    print("Unidentified system")
+    exit()
+
 
 _dir = "input"
 _output_dir = "output"
@@ -44,9 +55,10 @@ class UrlSource(enum.Enum):
 
 class BasicScraper():
     def __init__(self):
-        self._browser =   webdriver.Chrome(chrome_driver_binary, chrome_options=options)
-        # webdriver.Chrome(
-        #     service=Service(ChromeDriverManager(version="94.0.4606.113",chrome_type=ChromeType.CHROMIUM,cache_valid_range=7).install()),chrome_options=options)
+        # self._browser = webdriver.Chrome(
+        #     service=Service(ChromeDriverManager(cache_valid_range=7).install()))
+        self._browser = webdriver.Chrome(
+            service=Service(ChromeDriverManager(version="96.0.4664.45",chrome_type=ChromeType.CHROMIUM ,cache_valid_range=7).install()),options=options)
         self._timer = 1.5
 
     def getTextById(self, _id: str) -> str:
