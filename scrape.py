@@ -576,7 +576,7 @@ class MouserScraper(BasicScraper):
         url = "https://www.mouser.com/"
         self._browser.get(url)
         sleep(8)
-        if not(self.isElementPresent('//input[@placeholder="Part # / Keyword"]')):
+        if self.isElementPresent('//input[@placeholder="Part # / Keyword"]') is None:
             self.getItem(item)
         else:
             self._browser.find_element(by=By.XPATH,value='//input[@placeholder="Part # / Keyword"]').send_keys(item)
@@ -586,7 +586,7 @@ class MouserScraper(BasicScraper):
         if("/c/?q=" in self._browser.current_url):
             self.scrollDown()
             sleep(10)
-            if self.isElementPresent('//*[@id="lblreccount"]'):
+            if self.isElementPresent('//*[@id="lblreccount"]') or self.isElementPresent('//*[@class="record-count-lbl"]'):
                 self.scrollIntoView('//*[@id="lnkProductImage_2"]')
                 self._browser.find_element(By.XPATH,'//*[@id="productImgDiv_1"]').click()
                 sleep(10)
@@ -654,7 +654,7 @@ class MouserScraper(BasicScraper):
             if ("Query" in present_columns):
 
                 # iterate over each row in the pandas DataFrame
-                for index, row in enumerate(raw_data.to_dict(orient='records')[0:]):
+                for index, row in enumerate(raw_data.to_dict(orient='records')[3:]):
                     print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
                         index+1, row["Manufacturer"], row["Query"]))
                     # get to Product/item Page if it exists
