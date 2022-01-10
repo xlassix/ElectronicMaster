@@ -441,7 +441,7 @@ class DigiKeyScraper(BasicScraper):
     def __init__(self):
         super().__init__()
         self._source = UrlSource.digiKey
-        self._timer = 0.5
+        self._timer = 0.1
 
     def getItem(self, item: str) -> bool:
         """This method Checks if an item query as any results on the current page
@@ -460,9 +460,9 @@ class DigiKeyScraper(BasicScraper):
         self._browser.find_element(
             by=By.XPATH, value='//*[@id="header-search-button"]').click()
         if self.isElementPresent('//*[@id="__next"]/main/div/div/div/div[2]/div[1]/div[1]/div/span'):
-            return False
+            return {"found":False,"links":[]}
         if "https://www.digikey.com/en/products/detail" in self._browser.current_url:
-            return True
+            return {"found":True,"links":[]}
         elif "https://www.digikey.com/en/products/filter/" in self._browser.current_url:
             if self.isElementPresent('//*[@id="data-table-0"]/tbody/tr[1]/td[2]/div/div[3]/div[1]/a'):
                 self.scrollIntoView(
@@ -472,23 +472,24 @@ class DigiKeyScraper(BasicScraper):
                     by=By.XPATH, value='//*[@id="data-table-0"]/tbody/tr[1]/td[2]/div/div[3]/div[1]/a').click()
                 sleep(0.5)
                 print("selected from table")
-                return True
+                return {"found":True,"links":[]}
         elif "https://www.digikey.com/en/products/category/" in self._browser.current_url:
             self.scrollIntoView('//*[@id="__next"]/main/div/div/div/div[5]')
             sleep(self._timer)
-            self._browser.find_element(by=By.XPATH,value='//a[starts-with(@data-testid,"product-card")]').click()
+            elems=self._browser.find_elements(by=By.XPATH,value='//a[starts-with(@data-testid,"product-card")]')
             sleep(2)
-            return True
-        return True
+            print([elem.get_attribute('href') for elem in elems])
+            return {"found":True,"links":[elem.get_attribute('href') for elem in elems]}
+        return {"found":True,"links":[]}
 
-    def getPriceList(self, data) -> list:
+    def getPriceList(self, data) -> dict():
         """This method get the Price list(dict) For UrlSource on a product page
 
-        Args:
-            browser (webdriver): Selenium.WebDriver
-
         Returns:
-            dict
+            dict: {
+                    "found":bool,
+                    "list":list
+                  }
         """
         return [{"Price Break Qty": self.parseFloat(item[0]), "Price Break Price":self.parseFloat(item[1])} for item in [elem.split("$") for elem in data.replace(",", "").split("\n")]]
 
@@ -525,7 +526,7 @@ class DigiKeyScraper(BasicScraper):
             row["Mfr Stock"]= self.extractDigit(factoryStock[factoryStock.find("Factory Stock:"):].replace(",", ""))
         if orderDate:= self.isElementPresent('//*[@class="dk-table"]/tbody'):
             print(orderDate)
-        return row
+        return row,pricing_df
 
 
     def scrape(self, input_dir: str, output_dir: str):
@@ -562,9 +563,20 @@ class DigiKeyScraper(BasicScraper):
                     print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
                         index+1, row["Manufacturer"], row["Query"]))
                     # get to Product/item Page if it exists
-                    if self.getItem(row["Query"]):
+                    item_status=self.getItem(row["Query"])
+                    print(item_status)
+                    if len(item_status["links"])>0:
+                        for link in item_status["links"]:
+                            self._browser.get(link)
+                            row['Run Datetime'] = timestamp
+                            (row,pricing_df)= self.miniScraper(row,pricing_df)
+                            row["URL"] = self._browser.current_url
+                            result_df = result_df.append(
+                                row, ignore_index=True, sort=False)
+                        continue
+                    elif item_status["found"]:
                         row['Run Datetime'] = timestamp
-                        row= self.miniScraper(row,pricing_df)
+                        (row,pricing_df)= self.miniScraper(row,pricing_df)
                     else:
                         # if Item is not found
                         row['Run Datetime'] = timestamp
