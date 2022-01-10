@@ -493,7 +493,18 @@ class DigiKeyScraper(BasicScraper):
         """
         return [{"Price Break Qty": self.parseFloat(item[0]), "Price Break Price":self.parseFloat(item[1])} for item in [elem.split("$") for elem in data.replace(",", "").split("\n")]]
 
-    def miniScraper(self,row:dict,pricing_df:pd.DataFrame)->dict:
+    def miniScraper(self,row:dict,pricing_df:pd.DataFrame)->(dict,pd.DataFrame):
+        """This method Scapes all valuable data from the Product Detail page for Digi-Key
+
+        Args:
+            row: dict
+            pricing_df: DataFrame for pricing
+
+        Returns:
+            dict: update Rows
+            DataFrame: DataFrame for pricing
+        """
+
         #scrape manufactures Info if it exist
         if mfr := self.isElementPresent('//*[@id="__next"]/main/div/div[1]/div/div[2]/div/table/tbody/tr[2]/td[2]'):
             row["Mfr"] = mfr
@@ -565,8 +576,11 @@ class DigiKeyScraper(BasicScraper):
                     # get to Product/item Page if it exists
                     item_status=self.getItem(row["Query"])
                     print(item_status)
+
+                    #for Exact match item_status["links"] would be greater than Zero
                     if len(item_status["links"])>0:
                         for link in item_status["links"]:
+                            #visit each link 
                             self._browser.get(link)
                             row['Run Datetime'] = timestamp
                             (row,pricing_df)= self.miniScraper(row,pricing_df)
@@ -638,10 +652,17 @@ class MouserScraper(BasicScraper):
         """This method get the Price list(dict) For UrlSource on a product page
 
         Args:
-            browser (webdriver): Selenium.WebDriver
+            data(list): A list of string with odd indexes as `Price Break Qty` and Even Indexes as `Price Break Price`
 
         Returns:
-            dict
+            [dict]: return a list of dicts label 
+                     That's : [
+                        {
+                        Price Break Qty: xx,
+                        Price Break Price: yyy
+                        },....
+                     ]
+
         """
         return [{"Price Break Qty": self.parseFloat(item[0]), "Price Break Price":self.parseFloat(item[1])} for item in [elem.split("$") for elem in data]]
 
@@ -652,7 +673,7 @@ class MouserScraper(BasicScraper):
             data (list): 
 
         Returns:
-            list:
+            list
         """
         return [ {"On-Order Date":elem[1],"On-Order Date":elem[0]} for elem in [data[i:i + 2] for i in range(0, len(data), 2)] ]
         
@@ -722,7 +743,7 @@ class MouserScraper(BasicScraper):
                             pricing_df=pricing_df.append(temp_pricing_df)
                         if len(temp_pricing_df.index)!=0:
                             row["Min Order"]=temp_pricing_df["Price Break Qty"].min()
-                        del temp_pricing_df # selete Datafrane after us                        
+                        del temp_pricing_df # delete Datafrane after use                        
                         
                     else:
                         # if Item is not found
