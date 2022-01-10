@@ -218,8 +218,8 @@ class MasterElectronicsScraper(BasicScraper):
         """
         data = self.getTextById('divPriceListLeft').split("\n")[3:]
         del data[2::3]
-        return(dict(("PB{} Qty".format(index//2+1), self.parseFloat(i)) if(index % 2 == 0)
-                    else ("PB{} $".format(index//2+1), self.parseFloat(i)) for index, i in enumerate(data[:20])))
+
+        return ([{"Price Break Qty": self.parseFloat(elem[0]), "Price Break Price":self.parseFloat(elem[1])} for elem in [data[i:i + 2] for i in range(0, len(data), 2)] ])
 
     def getMfrDetail(self) -> dict:
         """The function get manafacturers For ElectoricMaster.com on a product page
@@ -253,9 +253,12 @@ class MasterElectronicsScraper(BasicScraper):
         """
         for excel in (self.getExcels(input_dir)):  # get excels
             # print('\n\n')
+            _columns_no_price = ['Internal Part Number', 'Description', 'Manufacturer', 'Query',
+            'Qty', 'Run Datetime', "Stock", "Mfr PN", "Mfr", "Mfr Stock", "Mfr Stock Date", 'On-Order', 'On-Order Date', "Lead-Time", "Min Order","URL"]
 
             # initialise result DataFrame
-            result_df = pd.DataFrame(columns=_columns)
+            result_df = pd.DataFrame(columns=_columns_no_price)
+            pricing_df =pd.DataFrame(columns=_columns_pricing)
 
             # current time
             timestamp = datetime.now()
@@ -290,7 +293,12 @@ class MasterElectronicsScraper(BasicScraper):
                         row["Stock"] = self.parseFloat(
                             self.getTextByXPath('//*[@id="divInInstock"]/span'))
                         row.update(self.getMfrDetail())
-                        row.update(self.getPriceList())
+                        if prices:=self.getPriceList():
+                            temp_pricing_df =pd.DataFrame(columns=_columns_pricing).append(prices)
+                            temp_pricing_df["Query"]=row["Query"]
+                            temp_pricing_df["source"]=self._source.name
+                            temp_pricing_df["MPN"]=row["Mfr PN"]
+                            pricing_df=pricing_df.append(temp_pricing_df)
                     else:
                         row['Run Datetime'] = timestamp
                         row['Mfr'] = "No Result"
@@ -301,8 +309,8 @@ class MasterElectronicsScraper(BasicScraper):
                         row, ignore_index=True, sort=False)
             else:
                 print("could not find `Query` in {}".format(excel))
-            result_df[_columns].to_excel(
-                path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
+            filename =  path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx"))
+            self.writeToFile( filename,parts=result_df,pricing=pricing_df)
 
 
 class MiniCircuitScraper(BasicScraper):
@@ -350,10 +358,7 @@ class MiniCircuitScraper(BasicScraper):
         """
         data = list(map(lambda x: list(map(lambda y: y.split(" ")[0], x.split(
             " $"))), self.getTextByXPath('//*[@id="model_price_section"]/table').split("\n")[1:]))
-        results = []
-        list(results.extend([("PB{} Qty".format(index+1), self.parseFloat(i[0])),
-                            ("PB{} $".format(index+1), self.parseFloat(i[1]))]) for index, i in enumerate(data[:20]))
-        return dict(results)
+        return ([{"Price Break Qty": self.parseFloat(elem[0]), "Price Break Price":self.parseFloat(elem[1])} for elem in data])
 
     def scrape(self, input_dir: str, output_dir: str):
         """This method reads all the excels in Xlsx and csv format from the specified input directory and writes the scraped output 
@@ -363,11 +368,14 @@ class MiniCircuitScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        for excel in (self.getExcels(input_dir)):  # get excels
+        for excel in (self.getExcels(input_dir)[1:]):  # get excels
             # print('\n\n')
 
             # initialise result DataFrame
-            result_df = pd.DataFrame(columns=_columns)
+            _columns_no_price = ['Internal Part Number', 'Description', 'Manufacturer', 'Query',
+            'Qty', 'Run Datetime', "Stock", "Mfr PN", "Mfr", "Mfr Stock", "Mfr Stock Date", 'On-Order', 'On-Order Date', "Lead-Time", "Min Order","URL"]
+            result_df = pd.DataFrame(columns=_columns_no_price)
+            pricing_df = pd.DataFrame(columns=_columns_pricing)
 
             # current time
             timestamp = datetime.now()
@@ -407,7 +415,11 @@ class MiniCircuitScraper(BasicScraper):
                             row["Stock"] = ">" + \
                                 stock[-1] if len(stock) > 1 else stock[-1]
                         if self.isElementPresent('//*[@id="model_price_section"]/table/thead/tr/th[1]'):
-                            row.update(self.getPriceList())
+                            temp_pricing_df = pd.DataFrame(columns=_columns_pricing).append(self.getPriceList())
+                            temp_pricing_df["Query"]=row["Query"]
+                            temp_pricing_df["source"]=self._source.name
+                            temp_pricing_df["MPN"]=row["Mfr PN"]
+                            pricing_df=pricing_df.append(temp_pricing_df)
                         if not "Stock" in row:
                             row["Stock"] = "No catalog"
                     else:
@@ -421,9 +433,8 @@ class MiniCircuitScraper(BasicScraper):
                         row, ignore_index=True, sort=False)
             else:
                 print("could not find `Query` in {}".format(excel))
-            result_df[_columns].to_excel(
-                path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx")), index=False)
-
+            filename =  path.join(output_dir, str(timestamp)+self._source.name+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx"))
+            self.writeToFile( filename,parts=result_df,pricing=pricing_df)
 
 class DigiKeyScraper(BasicScraper):
 
