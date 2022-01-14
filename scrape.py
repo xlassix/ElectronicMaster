@@ -20,7 +20,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from sys import exit
 
-SEARCH_DIGIKEY = True
+SEARCH_DIGIKEY = False
 SEARCH_MOUSER = True
 
 
@@ -739,7 +739,7 @@ class MouserScraper(BasicScraper):
         Returns:
             list
         """
-        return [{"On-Order Date": elem[1], "On-Order Date":elem[0]} for elem in [data[i:i + 2] for i in range(0, len(data), 2)]]
+        return [{"On-Order Date": elem[1], "On-Order Date":elem[0]} for elem in [data[i:i + 2] for i in range(0, (len(data)//2)*2, 2)]]
 
     def fetchByQueryRow(self, row: dict, result_df: pd.DataFrame, pricing_df: pd.DataFrame, order_df:pd.DataFrame=pd.DataFrame()) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """This function querys mouserkey based on row on the input dataframe and return two df
