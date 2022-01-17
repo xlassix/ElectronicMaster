@@ -23,7 +23,7 @@ from sys import exit
 
 SEARCH_MASTERELECTRONIC = True
 SEARCH_MINI_CIRICUIT = False
-SEARCH_DIGIKEY = True
+SEARCH_DIGIKEY = False
 SEARCH_MOUSER = False
 
 
@@ -66,6 +66,7 @@ class UrlSource(enum.Enum):
 
 
 class BasicScraper():
+
     def __init__(self):
         # self._browser = webdriver.Chrome(
         #     service=Service(ChromeDriverManager(cache_valid_range=7).install()))
@@ -273,7 +274,12 @@ class MasterElectronicsScraper(BasicScraper):
             result["Min Order"] = self.parseFloat(data['Minimum Order:'])
         return result
 
-    def fetchByQueryRow(self, row: dict, result_df: pd.DataFrame, pricing_df: pd.DataFrame, order_df: pd.DataFrame=pd.DataFrame()) -> (pd.DataFrame, pd.DataFrame):
+    def fetchByQueryRow(self,
+                        row: dict, 
+                        result_df: pd.DataFrame, 
+                        pricing_df: pd.DataFrame, 
+                        order_df: pd.DataFrame=pd.DataFrame(columns=_columns_on_order)
+                        ) -> (pd.DataFrame, pd.DataFrame):
         """This function querys MasterElectronic based on row on the input dataframe and return two df
         1. pricing DataFrame
         2. Result DataFrame
@@ -305,6 +311,13 @@ class MasterElectronicsScraper(BasicScraper):
             row["Stock"] = self.parseFloat(
                 self.getTextByXPath('//*[@id="divInInstock"]/span'))
             row.update(self.getMfrDetail())
+            if ('On-Order' in row):
+                order_df=order_df.append({"MPN" : row["Mfr PN"],
+                                        "Query" : row["Query"],
+                                        "Source": self._source.name, 
+                                        "On-Order Qty": row['On-Order'],
+                                        "On-Order Date": row["On-Order Date"]},ignore_index=True, sort=False)
+                row.pop("On-Order Date"),row.pop('On-Order')
             if prices := self.getPriceList():
                 temp_pricing_df = pd.DataFrame(
                     columns=_columns_pricing).append(prices)
@@ -477,7 +490,7 @@ class MiniCircuitScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        for excel in (self.getExcels(input_dir)[1:]):  # get excels
+        for excel in (self.getExcels(input_dir)):  # get excels
             # print('\n\n')
 
             # initialise result DataFrame
