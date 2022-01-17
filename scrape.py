@@ -20,8 +20,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from sys import exit
 
+
+SEARCH_MASTERELECTRONIC = True
+SEARCH_MINI_CIRICUIT = False
 SEARCH_DIGIKEY = False
-SEARCH_MOUSER = True
+SEARCH_MOUSER = False
 
 
 _dir = "input"
@@ -63,6 +66,7 @@ class UrlSource(enum.Enum):
 
 
 class BasicScraper():
+
     def __init__(self):
         # self._browser = webdriver.Chrome(
         #     service=Service(ChromeDriverManager(cache_valid_range=7).install()))
@@ -270,6 +274,67 @@ class MasterElectronicsScraper(BasicScraper):
             result["Min Order"] = self.parseFloat(data['Minimum Order:'])
         return result
 
+    def fetchByQueryRow(self,
+                        row: dict, 
+                        result_df: pd.DataFrame, 
+                        pricing_df: pd.DataFrame, 
+                        order_df: pd.DataFrame=pd.DataFrame(columns=_columns_on_order)
+                        ) -> (pd.DataFrame, pd.DataFrame):
+        """This function querys MasterElectronic based on row on the input dataframe and return two df
+        1. pricing DataFrame
+        2. Result DataFrame
+        3. Order DataFrame
+
+        Args:
+            row(dict): parsedRow containing columns as key and cells as value
+            result_df: to append results
+            pricing_df: to append pricing
+            Order_df:
+        Returns:
+            result_df
+            pricing_df
+            order_df
+        """
+        # current time
+        timestamp = datetime.now()
+
+        # get to Product/item Page if it exists
+        if self.getItem(row["Query"]):
+            row['Run Datetime'] = timestamp
+            row['Mfr'] = self.getTextByXPath(
+                '//*[@id="product-details"]/a')
+            row["Mfr PN"] = self.getTextByXPath(
+                '//*[@id="product-details"]/h1')
+            mfr_date = self.getTextById('lblDateFactory')
+            row["Mfr Stock Date"] = "#N/A" if len(
+                mfr_date) == 0 else self.parseDate(mfr_date)
+            row["Stock"] = self.parseFloat(
+                self.getTextByXPath('//*[@id="divInInstock"]/span'))
+            row.update(self.getMfrDetail())
+            if ('On-Order' in row):
+                order_df=order_df.append({"MPN" : row["Mfr PN"],
+                                        "Query" : row["Query"],
+                                        "Source": self._source.name, 
+                                        "On-Order Qty": row['On-Order'],
+                                        "On-Order Date": row["On-Order Date"]},ignore_index=True, sort=False)
+                row.pop("On-Order Date"),row.pop('On-Order')
+            if prices := self.getPriceList():
+                temp_pricing_df = pd.DataFrame(
+                    columns=_columns_pricing).append(prices)
+                temp_pricing_df["Query"] = row["Query"]
+                temp_pricing_df["source"] = self._source.name
+                temp_pricing_df["MPN"] = row["Mfr PN"]
+                pricing_df = pricing_df.append(temp_pricing_df)
+        else:
+            row['Run Datetime'] = timestamp
+            row['Mfr'] = "No Result"
+            row["Mfr PN"] = "No Result"
+        row["Source"] = self._source.name
+        row["URL"] = self._browser.current_url
+        result_df = result_df.append(
+            row, ignore_index=True, sort=False)
+        return result_df,pricing_df,order_df
+
     def scrape(self, input_dir: str, output_dir: str):
         """This method reads all the excels in Xlsx and csv format from the specified input directory and writes the scraped output
         into the corresponding output directory
@@ -306,35 +371,7 @@ class MasterElectronicsScraper(BasicScraper):
                 for index, row in enumerate(raw_data.to_dict(orient='records')):
                     print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
                         index+1, row["Manufacturer"], row["Query"]))
-
-                    # get to Product/item Page if it exists
-                    if self.getItem(row["Query"]):
-                        row['Run Datetime'] = timestamp
-                        row['Mfr'] = self.getTextByXPath(
-                            '//*[@id="product-details"]/a')
-                        row["Mfr PN"] = self.getTextByXPath(
-                            '//*[@id="product-details"]/h1')
-                        mfr_date = self.getTextById('lblDateFactory')
-                        row["Mfr Stock Date"] = "#N/A" if len(
-                            mfr_date) == 0 else self.parseDate(mfr_date)
-                        row["Stock"] = self.parseFloat(
-                            self.getTextByXPath('//*[@id="divInInstock"]/span'))
-                        row.update(self.getMfrDetail())
-                        if prices := self.getPriceList():
-                            temp_pricing_df = pd.DataFrame(
-                                columns=_columns_pricing).append(prices)
-                            temp_pricing_df["Query"] = row["Query"]
-                            temp_pricing_df["source"] = self._source.name
-                            temp_pricing_df["MPN"] = row["Mfr PN"]
-                            pricing_df = pricing_df.append(temp_pricing_df)
-                    else:
-                        row['Run Datetime'] = timestamp
-                        row['Mfr'] = "No Result"
-                        row["Mfr PN"] = "No Result"
-                    row["Source"] = self._source.value
-                    row["URL"] = self._browser.current_url
-                    result_df = result_df.append(
-                        row, ignore_index=True, sort=False)
+                    result_df, pricing_df,order_df = self.fetchByQueryRow(row, result_df, pricing_df)
             else:
                 print("could not find `Query` in {}".format(excel))
             filename = path.join(output_dir, str(
@@ -381,13 +418,69 @@ class MiniCircuitScraper(BasicScraper):
 
         Args:
             browser (webdriver): Selenium.WebDriver
-
         Returns:
             dict
         """
         data = list(map(lambda x: list(map(lambda y: y.split(" ")[0], x.split(
             " $"))), self.getTextByXPath('//*[@id="model_price_section"]/table').split("\n")[1:]))
         return ([{"Price Break Qty": self.parseFloat(elem[0]), "Price Break Price":self.parseFloat(elem[1])} for elem in data])
+
+    def fetchByQueryRow(self, row: dict, result_df: pd.DataFrame, pricing_df: pd.DataFrame, order_df: pd.DataFrame=pd.DataFrame()) -> (pd.DataFrame, pd.DataFrame):
+        """This function querys mini-Ciruit based on row on the input dataframe and return two df
+        1. pricing DataFrame
+        2. Result DataFrame
+        3. Order DataFrame
+
+        Args:
+            row(dict): parsedRow containing columns as key and cells as value
+            result_df: to append results
+            pricing_df: to append pricing
+            Order_df:
+        Returns:
+            result_df
+            pricing_df
+            order_df
+        """
+        # current time
+        timestamp = datetime.now()
+
+        # get to Product/item Page if it exists
+        if self.getItem(row["Query"]):
+            row['Run Datetime'] = timestamp
+            row['Mfr'] = "Mini-Circuits"
+            row["Mfr PN"] = self.isElementPresent(
+                '//*[@id="content_area_home"]/section/section[1]/label[1]')
+            mfr_date_text = self.isElementPresent(
+                '//*[@id="model_price_section"]/div/p/span')
+            if mfr_date_text:
+                row["On-Order Date"] = None if len(
+                    mfr_date_text.split(":")) < 2 else self.parseDate(mfr_date_text.split(":")[1].strip("*"), "%m/%d/%Y")
+            stock = self.isElementPresent(
+                '//*[@id="model_price_section"]/div/div[2]/span')
+            if stock:
+                stock = stock.split(" ")
+                row["Stock"] = ">" + \
+                    stock[-1] if len(stock) > 1 else stock[-1]
+            if self.isElementPresent('//*[@id="model_price_section"]/table/thead/tr/th[1]'):
+                temp_pricing_df = pd.DataFrame(
+                    columns=_columns_pricing).append(self.getPriceList())
+                temp_pricing_df["Query"] = row["Query"]
+                temp_pricing_df["source"] = self._source.name
+                temp_pricing_df["MPN"] = row["Mfr PN"]
+                pricing_df = pricing_df.append(temp_pricing_df)
+            if not "Stock" in row:
+                row["Stock"] = "No catalog"
+        else:
+            # if Item is not found
+            row['Run Datetime'] = timestamp
+            row['Mfr'] = "No Result"
+            row["Mfr PN"] = "No Result"
+        row["Source"] = self._source.name
+        row["URL"] = self._browser.current_url
+        result_df = result_df.append(
+            row, ignore_index=True, sort=False)
+        return result_df,pricing_df,order_df
+
 
     def scrape(self, input_dir: str, output_dir: str):
         """This method reads all the excels in Xlsx and csv format from the specified input directory and writes the scraped output
@@ -397,7 +490,7 @@ class MiniCircuitScraper(BasicScraper):
             input_dir (str): Input directory
             output_dir (str): Output Directory
         """
-        for excel in (self.getExcels(input_dir)[1:]):  # get excels
+        for excel in (self.getExcels(input_dir)):  # get excels
             # print('\n\n')
 
             # initialise result DataFrame
@@ -425,42 +518,7 @@ class MiniCircuitScraper(BasicScraper):
                 for index, row in enumerate(raw_data.to_dict(orient='records')):
                     print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
                         index+1, row["Manufacturer"], row["Query"]))
-
-                    # get to Product/item Page if it exists
-                    if self.getItem(row["Query"]):
-                        row['Run Datetime'] = timestamp
-                        row['Mfr'] = "Mini-Circuits"
-                        row["Mfr PN"] = self.isElementPresent(
-                            '//*[@id="content_area_home"]/section/section[1]/label[1]')
-                        mfr_date_text = self.isElementPresent(
-                            '//*[@id="model_price_section"]/div/p/span')
-                        if mfr_date_text:
-                            row["On-Order Date"] = None if len(
-                                mfr_date_text.split(":")) < 2 else self.parseDate(mfr_date_text.split(":")[1].strip("*"), "%m/%d/%Y")
-                        stock = self.isElementPresent(
-                            '//*[@id="model_price_section"]/div/div[2]/span')
-                        if stock:
-                            stock = stock.split(" ")
-                            row["Stock"] = ">" + \
-                                stock[-1] if len(stock) > 1 else stock[-1]
-                        if self.isElementPresent('//*[@id="model_price_section"]/table/thead/tr/th[1]'):
-                            temp_pricing_df = pd.DataFrame(
-                                columns=_columns_pricing).append(self.getPriceList())
-                            temp_pricing_df["Query"] = row["Query"]
-                            temp_pricing_df["source"] = self._source.name
-                            temp_pricing_df["MPN"] = row["Mfr PN"]
-                            pricing_df = pricing_df.append(temp_pricing_df)
-                        if not "Stock" in row:
-                            row["Stock"] = "No catalog"
-                    else:
-                        # if Item is not found
-                        row['Run Datetime'] = timestamp
-                        row['Mfr'] = "No Result"
-                        row["Mfr PN"] = "No Result"
-                    row["Source"] = self._source.value
-                    row["URL"] = self._browser.current_url
-                    result_df = result_df.append(
-                        row, ignore_index=True, sort=False)
+                    result_df,pricing_df,order_df = self.fetchByQueryRow(row, result_df, pricing_df)
             else:
                 print("could not find `Query` in {}".format(excel))
             filename = path.join(output_dir, str(
@@ -606,6 +664,7 @@ class DigiKeyScraper(BasicScraper):
                 row['Run Datetime'] = timestamp
                 (row, pricing_df) = self.miniScraper(row, pricing_df)
                 row["URL"] = self._browser.current_url
+                row["Source"]=self._source.name
                 result_df = result_df.append(
                     row, ignore_index=True, sort=False)
             return (result_df, pricing_df, order_df)
@@ -617,7 +676,7 @@ class DigiKeyScraper(BasicScraper):
             row['Run Datetime'] = timestamp
             row['Mfr'] = "No Result"
             row["Mfr PN"] = "* NOT FOUND *"
-        # row["Source"] = self._source.value
+        row["Source"] = self._source.name
         row["URL"] = self._browser.current_url
         result_df = result_df.append(
                         row, ignore_index=True, sort=False)
@@ -801,7 +860,7 @@ class MouserScraper(BasicScraper):
             row['Run Datetime'] = timestamp
             row['Mfr'] = "No Result"
             row["Mfr PN"] = "* NOT FOUND *"
-        # row["Source"] = self._source.value
+        row["Source"] = self._source.name
         row["URL"] = self._browser.current_url
         result_df = result_df.append(
             row, ignore_index=True, sort=False)
@@ -884,12 +943,16 @@ def main():
         site= args['site']
         scraper= SCRAPER_DICT[site]()
         scraper.scrape(input_dir =_dir, output_dir=_output_dir)
-    elif any([SEARCH_DIGIKEY, SEARCH_MOUSER]):
+    elif any([SEARCH_DIGIKEY, SEARCH_MOUSER,SEARCH_MASTERELECTRONIC,SEARCH_MINI_CIRICUIT]):
         classes=[]
         if SEARCH_DIGIKEY:
             classes.append(DigiKeyScraper)
         if SEARCH_MOUSER:
             classes.append(MouserScraper)
+        if SEARCH_MASTERELECTRONIC:
+            classes.append(MasterElectronicsScraper)
+        if SEARCH_MINI_CIRICUIT:
+            classes.append(MiniCircuitScraper) 
         for excel in (BasicScraper.getExcels(path=_dir)):  # get excels
             # current time
             timestamp= datetime.now()
