@@ -4,3 +4,4 @@ input
 output
 Pipfile.lock
 chromedriver
+.vscode
