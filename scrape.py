@@ -21,10 +21,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from sys import exit
 
 
-SEARCH_MASTERELECTRONIC = True
+SEARCH_MASTERELECTRONIC = False
 SEARCH_MINI_CIRICUIT = False
 SEARCH_DIGIKEY = False
-SEARCH_MOUSER = False
+SEARCH_MOUSER = True
 
 
 _dir = "input"
@@ -760,7 +760,7 @@ class MouserScraper(BasicScraper):
             if self.isElementPresent('//*[@id="lblreccount"]') or self.isElementPresent('//*[@class="record-count-lbl"]'):
                 self.scrollIntoView('//*[@id="lnkProductImage_2"]')
                 self._browser.find_element(
-                    By.XPATH, '//*[@id="productImgDiv_1"]').click()
+                    By.XPATH, '//a[@id="lnkProductImage_1"]').click()
                 sleep(5)
                 return True
         if "//www.mouser.com/ProductDetail" in self._browser.current_url:
