@@ -21,10 +21,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from sys import exit
 
 
-SEARCH_MASTERELECTRONIC = True
+SEARCH_MASTERELECTRONIC = False
 SEARCH_MINI_CIRICUIT = False
 SEARCH_DIGIKEY = False
-SEARCH_MOUSER = False
+SEARCH_MOUSER = True
 
 
 _dir = "input"
@@ -953,7 +953,7 @@ def main():
             classes.append(MasterElectronicsScraper)
         if SEARCH_MINI_CIRICUIT:
             classes.append(MiniCircuitScraper) 
-        for excel in (BasicScraper.getExcels(path=_dir)):  # get excels
+        for excel in (BasicScraper.getExcels(path=_dir)[3:]):  # get excels
             # current time
             timestamp= datetime.now()
             # read csv into pandas
