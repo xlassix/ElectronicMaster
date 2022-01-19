@@ -760,7 +760,7 @@ class MouserScraper(BasicScraper):
             if self.isElementPresent('//*[@id="lblreccount"]') or self.isElementPresent('//*[@class="record-count-lbl"]'):
                 self.scrollIntoView('//*[@id="lnkProductImage_2"]')
                 self._browser.find_element(
-                    By.XPATH, '//*[@id="productImgDiv_1"]').click()
+                    By.XPATH, '//a[@id="lnkProductImage_1"]').click()
                 sleep(5)
                 return True
         if "//www.mouser.com/ProductDetail" in self._browser.current_url:
@@ -953,7 +953,7 @@ def main():
             classes.append(MasterElectronicsScraper)
         if SEARCH_MINI_CIRICUIT:
             classes.append(MiniCircuitScraper) 
-        for excel in (BasicScraper.getExcels(path=_dir)[3:]):  # get excels
+        for excel in (BasicScraper.getExcels(path=_dir)):  # get excels
             # current time
             timestamp= datetime.now()
             # read csv into pandas
