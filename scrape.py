@@ -1,6 +1,7 @@
 from selenium import webdriver
-from os import listdir, path, makedirs
+from os import listdir, path, makedirs,environ
 import pandas as pd
+from requests import post
 from time import sleep
 from datetime import datetime
 from webdriver_manager.chrome import ChromeDriverManager
@@ -21,7 +22,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from sys import exit
 
 
-SEARCH_MASTERELECTRONIC = False
+SEARCH_MASTERELECTRONIC = True
 SEARCH_MINI_CIRICUIT = False
 SEARCH_DIGIKEY = False
 SEARCH_MOUSER = True
@@ -909,14 +910,78 @@ class MouserScraper(BasicScraper):
             self.writeToFile(filename, parts=result_df, pricing=pricing_df, on_order=order_df)
 
 
+class MouserAPIScraper(BasicScraper):
+
+    def __init__(self):
+        super().__init__()
+        self._source = UrlSource.mouser
+        self.close_browser()
+
+    def __del__(self):
+        pass
+
+    @staticmethod
+    def fetchByKeyword(query: str, quantity_return:int=1, API_KEY=environ.get('MOUSER_API_KEY', '')) -> list:
+        """This method returns the list of parts fetched from Mouser's API
+
+        Args:
+            query (str): [description]
+            quantity_return (int, optional): The quantity of object to return. Defaults to 1.
+            API_KEY (str, optional): API key from Mouser. Defaults to environ.get('MOUSER_API_KEY', '').
+
+        Returns:
+            list: list of parts
+        """
+        data = post(url="https://api.mouser.com/api/v1/search/keyword?apiKey={}".format(API_KEY), json={
+            "SearchByKeywordRequest": {
+                "keyword": query,
+                "records": quantity_return
+            }
+        })
+        if (data.status_code == 200):
+            return (data.json()["SearchResults"]["Parts"])
+        return []
+
+    def fetchByQueryRow(self,
+                row:dict,
+                result_df:pd.DataFrame=pd.DataFrame(columns=_columns_part),
+                pricing_df:pd.DataFrame=pd.DataFrame(columns=_columns_pricing),
+                order_df:pd.DataFrame=pd.DataFrame(columns=_columns_on_order))->dict:
+        data=self.fetchByKeyword(row["Query"])
+        for product in data:
+            order_df=order_df.append({
+            "Query":row["Query"],
+            "MPN":product.get('ManufacturerPartNumber', None),
+            "Source":self._source.name,
+            "On-Order Qty":self.extractDigit(product.get('Availability',"0"))},ignore_index=True)
+            row.update({
+                "Min Order":product.get("Min", None),
+                "Stock":product.get("FactoryStock", None),
+                "Lead-Time":product.get("LeadTime", None),
+                "Mfr":product.get('Manufacturer', None),
+                "Mfr PN": product.get('ManufacturerPartNumber', None),
+                "URL": product.get('ProductDetailUrl', None),
+                "Run Datetime": datetime.now()
+            })
+            temp_pricing=pd.DataFrame(columns=_columns_pricing).append(product.get('PriceBreaks', []))
+            temp_pricing["Price Break Qty"]=temp_pricing["Quantity"]
+            temp_pricing["Price Break Price"]=temp_pricing["Price"].apply(self.parseFloat)
+            temp_pricing['source']=self._source.name
+            temp_pricing["Query"]=row['Query']
+            temp_pricing["MPN"]=product.get('ManufacturerPartNumber', None)
+            pricing_df=pricing_df.append(temp_pricing[_columns_pricing])
+            result_df=result_df.append(row,ignore_index=True)
+            result_df['Source']=self._source.name
+
+        return result_df, pricing_df,order_df
+
+
 # A dict of scrapers and their corresponding classes
 SCRAPER_DICT= {
     'masterelectronics.com': MasterElectronicsScraper,
     'mini-circuits.com': MiniCircuitScraper,
     "digikey.com": DigiKeyScraper,
-    "mouser.com": MouserScraper
-
-
+    "mouser.com": MouserAPIScraper
 }
 # A dict of scrapers and their corresponding classes
 
@@ -948,7 +1013,7 @@ def main():
         if SEARCH_DIGIKEY:
             classes.append(DigiKeyScraper)
         if SEARCH_MOUSER:
-            classes.append(MouserScraper)
+            classes.append(MouserAPIScraper)
         if SEARCH_MASTERELECTRONIC:
             classes.append(MasterElectronicsScraper)
         if SEARCH_MINI_CIRICUIT:
