@@ -37,7 +37,7 @@ _columns_pricing = ["Query", "MPN",
     "Price Break Qty",	"Price Break Price", "source"]
 _columns_on_order = ["Query", "MPN",
     "On-Order Date",	"On-Order Qty"	, "Source"]
-_columns_part = ['Internal Part Number', 'Description', 'Manufacturer', 'Query',
+_columns_part = ['Internal Part Number', 'Description', 'Meducationanufacturer', 'Query',
                  'Qty', 'Run Datetime', "Stock", "Mfr PN", "Mfr", "Mfr Stock", "Mfr Stock Date", "Lead-Time", "Min Order",	"URL"]
 
 
