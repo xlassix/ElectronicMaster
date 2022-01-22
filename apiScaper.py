@@ -88,11 +88,16 @@ class MouserAPIScraper(BasicAPIScraper):
         self._source = UrlSource.mouser
 
     @staticmethod
-    def fetchByKeyword(query: str, quantity_return=1, API_KEY=environ.get('MOUSER_API_KEY', '')) -> list:
-        """This method Querys
+    def fetchByKeyword(query: str, quantity_return:int=1, API_KEY=environ.get('MOUSER_API_KEY', '')) -> list:
+        """This method returns the list of parts fetched from Mouser's API
+
+        Args:
+            query (str): [description]
+            quantity_return (int, optional): The quantity of object to return. Defaults to 1.
+            API_KEY (str, optional): API key from Mouser. Defaults to environ.get('MOUSER_API_KEY', '').
 
         Returns:
-            [type]: [description]
+            list: list of parts
         """
         data = post(url="https://api.mouser.com/api/v1/search/keyword?apiKey={}".format(API_KEY), json={
             "SearchByKeywordRequest": {
@@ -103,12 +108,12 @@ class MouserAPIScraper(BasicAPIScraper):
         if (data.status_code == 200):
             return (data.json()["SearchResults"]["Parts"])
         return []
-
-    def extract(self,data: list,
+    def fetchByQueryRow(self,
                 row:dict,
                 result_df:pd.DataFrame=pd.DataFrame(columns=_columns_part),
                 pricing_df:pd.DataFrame=pd.DataFrame(columns=_columns_pricing),
                 order_df:pd.DataFrame=pd.DataFrame(columns=_columns_on_order))->dict:
+        data=self.fetchByKeyword(row["Query"])
         for product in data:
             order_df=order_df.append({
             "Query":row["Query"],
@@ -158,8 +163,7 @@ def main():
                     for index, row in enumerate(raw_data.to_dict(orient='records')):
                         print("currently at row: \t{}\n\t Manufacturer: \t {}\n\t Query:\t {}".format(
                             index+1, row["Manufacturer"], row["Query"]))
-                        (result_df, pricing_df, order_df) = instances.extract(
-                            _class.fetchByKeyword(row['Query']),row,result_df,pricing_df,order_df)
+                        (result_df, pricing_df, order_df) = instances.fetchByQueryRow(row,result_df, pricing_df, order_df)
                 filename = path.join(_output_dir, str(
                         timestamp)+"_"+(excel if excel.endswith(".xlsx") else excel+".xlsx"))
                 BasicAPIScraper.writeToFile(filename, result_df, pricing_df,order_df)
